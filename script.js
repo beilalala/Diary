@@ -101,7 +101,7 @@ function saveDiary() {
     }
     
     const diary = {
-        id: Date.now().toString(),
+        id: generateUniqueId(),
         title: title,
         content: content,
         timestamp: Date.now()
@@ -120,6 +120,12 @@ function saveDiary() {
     
     // 显示成功提示
     showNotification('日记保存成功！');
+}
+
+// 生成唯一ID
+function generateUniqueId() {
+    // 使用时间戳和随机数组合生成唯一ID
+    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
 // 删除日记
@@ -158,29 +164,7 @@ async function clearAllDiaries() {
 }
 
 // 显示通知
-let notificationStyleAdded = false;
-
 function showNotification(message) {
-    // 添加动画样式（只添加一次）
-    if (!notificationStyleAdded) {
-        const style = document.createElement('style');
-        style.id = 'notification-styles';
-        style.textContent = `
-            @keyframes slideInNotification {
-                from {
-                    transform: translateX(400px);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateX(0);
-                    opacity: 1;
-                }
-            }
-        `;
-        document.head.appendChild(style);
-        notificationStyleAdded = true;
-    }
-    
     // 创建通知元素
     const notification = document.createElement('div');
     notification.style.cssText = `
@@ -201,7 +185,7 @@ function showNotification(message) {
     
     // 3秒后移除
     setTimeout(() => {
-        notification.style.animation = 'slideInNotification 0.3s ease-out reverse';
+        notification.style.animation = 'slideOutNotification 0.3s ease-out';
         setTimeout(() => {
             notification.remove();
         }, 300);

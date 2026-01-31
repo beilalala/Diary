@@ -309,7 +309,7 @@ header h1 {
     }
 }
 
-@keyframes slideIn {
+@keyframes slideInNotification {
     from {
         transform: translateX(400px);
         opacity: 0;
@@ -317,5 +317,16 @@ header h1 {
     to {
         transform: translateX(0);
         opacity: 1;
+    }
+}
+
+@keyframes slideOutNotification {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(400px);
+        opacity: 0;
     }
 }
