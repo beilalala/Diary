@@ -96,7 +96,7 @@ function saveDiary() {
     const content = contentInput.value.trim();
     
     if (!content) {
-        alert('请输入日记内容！');
+        showNotification('请输入日记内容！');
         return;
     }
     
@@ -123,8 +123,9 @@ function saveDiary() {
 }
 
 // 删除日记
-function deleteDiary(id) {
-    if (!confirm('确定要删除这篇日记吗？')) {
+async function deleteDiary(id) {
+    const confirmed = await showConfirm('确定要删除这篇日记吗？');
+    if (!confirmed) {
         return;
     }
     
@@ -144,8 +145,9 @@ function clearInputs() {
 }
 
 // 清空所有日记
-function clearAllDiaries() {
-    if (!confirm('确定要删除所有日记吗？此操作无法撤销！')) {
+async function clearAllDiaries() {
+    const confirmed = await showConfirm('确定要删除所有日记吗？此操作无法撤销！');
+    if (!confirmed) {
         return;
     }
     
@@ -156,7 +158,29 @@ function clearAllDiaries() {
 }
 
 // 显示通知
+let notificationStyleAdded = false;
+
 function showNotification(message) {
+    // 添加动画样式（只添加一次）
+    if (!notificationStyleAdded) {
+        const style = document.createElement('style');
+        style.id = 'notification-styles';
+        style.textContent = `
+            @keyframes slideInNotification {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        notificationStyleAdded = true;
+    }
+    
     // 创建通知元素
     const notification = document.createElement('div');
     notification.style.cssText = `
@@ -169,35 +193,65 @@ function showNotification(message) {
         border-radius: 10px;
         box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
         z-index: 1000;
-        animation: slideIn 0.3s ease-out;
+        animation: slideInNotification 0.3s ease-out;
     `;
     notification.textContent = message;
-    
-    // 添加动画样式
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from {
-                transform: translateX(400px);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-    `;
-    document.head.appendChild(style);
     
     document.body.appendChild(notification);
     
     // 3秒后移除
     setTimeout(() => {
-        notification.style.animation = 'slideIn 0.3s ease-out reverse';
+        notification.style.animation = 'slideInNotification 0.3s ease-out reverse';
         setTimeout(() => {
             notification.remove();
         }, 300);
     }, 3000);
+}
+
+// 显示确认对话框
+function showConfirm(message) {
+    return new Promise((resolve) => {
+        // 创建模态框覆盖层
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        
+        // 创建模态框内容
+        const modal = document.createElement('div');
+        modal.className = 'modal-content';
+        modal.innerHTML = `
+            <div class="modal-title">确认操作</div>
+            <div class="modal-message">${escapeHtml(message)}</div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary modal-cancel">取消</button>
+                <button class="btn btn-danger modal-confirm">确定</button>
+            </div>
+        `;
+        
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        
+        // 取消按钮
+        const cancelBtn = modal.querySelector('.modal-cancel');
+        cancelBtn.addEventListener('click', () => {
+            overlay.remove();
+            resolve(false);
+        });
+        
+        // 确定按钮
+        const confirmBtn = modal.querySelector('.modal-confirm');
+        confirmBtn.addEventListener('click', () => {
+            overlay.remove();
+            resolve(true);
+        });
+        
+        // 点击覆盖层关闭
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+                resolve(false);
+            }
+        });
+    });
 }
 
 // 事件监听
