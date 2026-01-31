@@ -125,7 +125,7 @@ function saveDiary() {
 // 生成唯一ID
 function generateUniqueId() {
     // 使用时间戳和随机数组合生成唯一ID
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
 // 删除日记
