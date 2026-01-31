@@ -1,0 +1,216 @@
+// 日记数据存储键
+const STORAGE_KEY = 'lightweightDiary';
+
+// DOM 元素
+const titleInput = document.getElementById('titleInput');
+const contentInput = document.getElementById('contentInput');
+const saveBtn = document.getElementById('saveBtn');
+const clearBtn = document.getElementById('clearBtn');
+const clearAllBtn = document.getElementById('clearAllBtn');
+const diaryEntries = document.getElementById('diaryEntries');
+
+// 加载日记列表
+function loadDiaries() {
+    const diaries = getDiaries();
+    renderDiaries(diaries);
+}
+
+// 从本地存储获取日记
+function getDiaries() {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+}
+
+// 保存日记到本地存储
+function saveDiaries(diaries) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(diaries));
+}
+
+// 渲染日记列表
+function renderDiaries(diaries) {
+    if (diaries.length === 0) {
+        diaryEntries.innerHTML = '<div class="empty-state">还没有日记，开始写第一篇吧！</div>';
+        return;
+    }
+
+    diaryEntries.innerHTML = '';
+    
+    // 按时间倒序排列
+    const sortedDiaries = [...diaries].sort((a, b) => b.timestamp - a.timestamp);
+    
+    sortedDiaries.forEach(diary => {
+        const entryDiv = createDiaryElement(diary);
+        diaryEntries.appendChild(entryDiv);
+    });
+}
+
+// 创建日记元素
+function createDiaryElement(diary) {
+    const entryDiv = document.createElement('div');
+    entryDiv.className = 'diary-entry';
+    
+    const date = new Date(diary.timestamp);
+    const dateStr = formatDate(date);
+    
+    const title = diary.title || '无标题';
+    
+    entryDiv.innerHTML = `
+        <div class="entry-header">
+            <div class="entry-title">${escapeHtml(title)}</div>
+            <div class="entry-date">${dateStr}</div>
+        </div>
+        <div class="entry-content">${escapeHtml(diary.content)}</div>
+        <div class="entry-actions">
+            <button class="btn btn-danger btn-small delete-btn" data-id="${diary.id}">删除</button>
+        </div>
+    `;
+    
+    // 添加删除按钮事件
+    const deleteBtn = entryDiv.querySelector('.delete-btn');
+    deleteBtn.addEventListener('click', () => deleteDiary(diary.id));
+    
+    return entryDiv;
+}
+
+// 格式化日期
+function formatDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+// HTML 转义
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 保存新日记
+function saveDiary() {
+    const title = titleInput.value.trim();
+    const content = contentInput.value.trim();
+    
+    if (!content) {
+        alert('请输入日记内容！');
+        return;
+    }
+    
+    const diary = {
+        id: Date.now().toString(),
+        title: title,
+        content: content,
+        timestamp: Date.now()
+    };
+    
+    const diaries = getDiaries();
+    diaries.push(diary);
+    saveDiaries(diaries);
+    
+    // 清空输入框
+    titleInput.value = '';
+    contentInput.value = '';
+    
+    // 重新加载列表
+    loadDiaries();
+    
+    // 显示成功提示
+    showNotification('日记保存成功！');
+}
+
+// 删除日记
+function deleteDiary(id) {
+    if (!confirm('确定要删除这篇日记吗？')) {
+        return;
+    }
+    
+    let diaries = getDiaries();
+    diaries = diaries.filter(diary => diary.id !== id);
+    saveDiaries(diaries);
+    loadDiaries();
+    
+    showNotification('日记已删除');
+}
+
+// 清空输入框
+function clearInputs() {
+    titleInput.value = '';
+    contentInput.value = '';
+    contentInput.focus();
+}
+
+// 清空所有日记
+function clearAllDiaries() {
+    if (!confirm('确定要删除所有日记吗？此操作无法撤销！')) {
+        return;
+    }
+    
+    localStorage.removeItem(STORAGE_KEY);
+    loadDiaries();
+    
+    showNotification('所有日记已清空');
+}
+
+// 显示通知
+function showNotification(message) {
+    // 创建通知元素
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+        animation: slideIn 0.3s ease-out;
+    `;
+    notification.textContent = message;
+    
+    // 添加动画样式
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(notification);
+    
+    // 3秒后移除
+    setTimeout(() => {
+        notification.style.animation = 'slideIn 0.3s ease-out reverse';
+        setTimeout(() => {
+            notification.remove();
+        }, 300);
+    }, 3000);
+}
+
+// 事件监听
+saveBtn.addEventListener('click', saveDiary);
+clearBtn.addEventListener('click', clearInputs);
+clearAllBtn.addEventListener('click', clearAllDiaries);
+
+// 回车保存（Ctrl+Enter）
+contentInput.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') {
+        saveDiary();
+    }
+});
+
+// 页面加载时加载日记列表
+document.addEventListener('DOMContentLoaded', loadDiaries);

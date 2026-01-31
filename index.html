@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>轻量日记 - 王俊腾的家</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📔 轻量日记</h1>
+            <p class="subtitle">王俊腾的家</p>
+        </header>
+
+        <div class="diary-form">
+            <h2>写日记</h2>
+            <input type="text" id="titleInput" placeholder="标题（可选）">
+            <textarea id="contentInput" placeholder="今天发生了什么？" rows="6"></textarea>
+            <div class="button-group">
+                <button id="saveBtn" class="btn btn-primary">保存日记</button>
+                <button id="clearBtn" class="btn btn-secondary">清空</button>
+            </div>
+        </div>
+
+        <div class="diary-list">
+            <div class="list-header">
+                <h2>我的日记</h2>
+                <button id="clearAllBtn" class="btn btn-danger">清空全部</button>
+            </div>
+            <div id="diaryEntries"></div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
