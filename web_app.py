@@ -6,6 +6,7 @@ import time
 import math
 from datetime import datetime, date, timedelta
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
 
 
 def require_password():
@@ -90,15 +91,15 @@ def next_month(d: date):
 
 def format_seconds(total: int) -> str:
     total = max(0, int(total))
-    h = total // 3600
-    m = (total % 3600) // 60
+    m = total // 60
     s = total % 60
-    if h > 0:
-        return f"{h:02d}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
 
 
-st.set_page_config(page_title="轻量日程管理（Web）", layout="wide")
+rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Arial Unicode MS", "DejaVu Sans"]
+rcParams["axes.unicode_minus"] = False
+
+st.set_page_config(page_title="My Diary", layout="wide")
 require_password()
 
 st.markdown(
@@ -113,6 +114,12 @@ body { background-color: #EEF5FF; }
 .section-title { font-size: 20px; font-weight: 700; color: #1F3B57; margin: 6px 0 12px; }
 .timer-text { font-size: 42px; font-weight: 700; text-align: center; color: #1F3B57; }
 .focus-text { font-size: 20px; font-weight: 700; color: #1F3B57; text-align: right; }
+.week-day-card { padding: 8px 10px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; margin-bottom: 6px; }
+.week-day-card.flash-on { background: #C9D6F2; border-color: #9CB4E0; }
+.event-card { background: #FFFFFF; border-radius: 10px; padding: 8px 10px; margin: 6px 0; border: 1px solid #E2EAF5; font-size: 14px; }
+.event-time { font-weight: 700; color: #1F3B57; margin-right: 6px; }
+.stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
+.stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -120,7 +127,7 @@ body { background-color: #EEF5FF; }
 
 data = load_data()
 
-st.markdown("<div class='title'>轻量日程管理 — Web 版</div>", unsafe_allow_html=True)
+st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>轻量 · 舒适 · 便捷 · 治愈</div>", unsafe_allow_html=True)
 
 today_key = date.today().strftime("%Y-%m-%d")
@@ -140,41 +147,52 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
     st.stop()
 
 
+PAGES = ["周视图", "月视图", "番茄钟", "统计", "往期回顾"]
+if "page" not in st.session_state:
+    st.session_state.page = "周视图"
+if "week_flash_target" not in st.session_state:
+    st.session_state.week_flash_target = None
+    st.session_state.week_flash_step = 0
+    st.session_state.week_flash_on = False
+
+page_index = PAGES.index(st.session_state.page) if st.session_state.page in PAGES else 0
+selected_page = st.radio("导航", PAGES, horizontal=True, index=page_index, key="page_selector")
+st.session_state.page = selected_page
+
 with st.sidebar:
-    st.header("添加日程")
-    with st.form("add_event"):
-        t = st.text_input("名称", value="新日程")
-        d = st.date_input("日期", value=date.today())
-        start = st.time_input("开始时间", value=datetime.strptime("09:00", "%H:%M").time())
-        end = st.time_input("结束时间", value=datetime.strptime("10:00", "%H:%M").time())
-        cat = st.selectbox("类型", CATEGORIES)
-        notes = st.text_area("备注（可选）")
-        submitted = st.form_submit_button("保存")
-        if submitted:
-            new = {
-                "id": str(uuid.uuid4()),
-                "title": t.strip() or "未命名",
-                "date": d.strftime("%Y-%m-%d"),
-                "start": start.strftime("%H:%M"),
-                "end": end.strftime("%H:%M"),
-                "category": cat,
-                "notes": notes.strip(),
-            }
-            data["events"].append(new)
-            save_data(data)
-            st.success("已保存")
+    with st.expander("添加日程", expanded=st.session_state.page == "周视图"):
+        with st.form("add_event"):
+            t = st.text_input("名称", value="新日程")
+            d = st.date_input("日期", value=date.today())
+            start = st.time_input("开始时间", value=datetime.strptime("09:00", "%H:%M").time())
+            end = st.time_input("结束时间", value=datetime.strptime("10:00", "%H:%M").time())
+            cat = st.selectbox("类型", CATEGORIES)
+            notes = st.text_area("备注（可选）")
+            submitted = st.form_submit_button("保存")
+            if submitted:
+                new = {
+                    "id": str(uuid.uuid4()),
+                    "title": t.strip() or "未命名",
+                    "date": d.strftime("%Y-%m-%d"),
+                    "start": start.strftime("%H:%M"),
+                    "end": end.strftime("%H:%M"),
+                    "category": cat,
+                    "notes": notes.strip(),
+                }
+                data["events"].append(new)
+                save_data(data)
+                st.success("已保存")
 
 
-tab_week, tab_month, tab_pomodoro, tab_stats, tab_archive = st.tabs([
-    "周视图", "月视图", "番茄钟", "统计", "往期回顾"
-])
-
-
-with tab_week:
+if selected_page == "周视图":
     st.markdown("<div class='section-title'>周视图</div>", unsafe_allow_html=True)
     picked = st.date_input("选择周中的任意日期", value=date.today(), key="week_pick")
     week_start = iso_week_start(picked)
     st.markdown(f"**周：{week_start.strftime('%Y/%m/%d')} - {(week_start + timedelta(days=6)).strftime('%Y/%m/%d')}**")
+
+    flash_target = st.session_state.week_flash_target
+    flash_on = st.session_state.week_flash_on
+    flash_step = st.session_state.week_flash_step
 
     day_cols = st.columns(7)
     for i in range(7):
@@ -182,21 +200,38 @@ with tab_week:
         day_key = d.strftime("%Y-%m-%d")
         events = [e for e in data["events"] if e["date"] == day_key]
         with day_cols[i]:
-            st.markdown(f"**{d.strftime('%a')}**  {d.strftime('%m/%d')}")
+            is_flash = flash_target == day_key and flash_on
+            card_class = "week-day-card flash-on" if is_flash else "week-day-card"
+            st.markdown(
+                f"<div class='{card_class}'>"
+                f"<div><strong>{d.strftime('%a')}</strong> {d.strftime('%m/%d')}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
             if not events:
                 st.caption("无日程")
             else:
                 for ev in sorted(events, key=lambda x: x["start"]):
                     c = CATEGORY_COLORS.get(ev.get("category", "其他"), "#EEE")
                     st.markdown(
-                        f"<div class='tag' style='background:{c};'>"
-                        f"{ev['start']}-{ev['end']} {ev['title']}"
+                        f"<div class='event-card' style='border-color:{c};'>"
+                        f"<span class='event-time'>{ev['start']}-{ev['end']}</span>{ev['title']}"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
 
+    if flash_target and flash_step < 4:
+        time.sleep(0.25)
+        st.session_state.week_flash_on = not flash_on
+        st.session_state.week_flash_step = flash_step + 1
+        st.experimental_rerun()
+    elif flash_target:
+        st.session_state.week_flash_target = None
+        st.session_state.week_flash_step = 0
+        st.session_state.week_flash_on = False
 
-with tab_month:
+
+if selected_page == "月视图":
     st.markdown("<div class='section-title'>月视图</div>", unsafe_allow_html=True)
     curr = st.date_input("选择月（选择任意当月日期）", value=date.today(), key="month_pick")
     m_start = month_start(curr)
@@ -217,20 +252,19 @@ with tab_month:
                     continue
                 current = m_start.replace(day=day_cursor)
                 mood = data["moods"].get(current.strftime("%Y-%m-%d"), "")
-                st.markdown(f"**{day_cursor} {mood}**")
-                items = [e for e in data["events"] if e["date"] == current.strftime("%Y-%m-%d")]
-                for ev in items[:2]:
-                    c = CATEGORY_COLORS.get(ev.get("category", "其他"), "#EEE")
-                    st.markdown(
-                        f"<div class='tag' style='background:{c};'>"
-                        f"{ev['title']}"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
+                label = f"{day_cursor} {mood}" if mood else f"{day_cursor}"
+                clicked = st.button(label, key=f"month_day_{current.strftime('%Y%m%d')}", use_container_width=True)
+                if clicked:
+                    st.session_state.page = "周视图"
+                    st.session_state.page_selector = "周视图"
+                    st.session_state.week_pick = current
+                    st.session_state.week_flash_target = current.strftime("%Y-%m-%d")
+                    st.session_state.week_flash_step = 0
+                    st.session_state.week_flash_on = True
+                    st.experimental_rerun()
                 day_cursor += 1
 
-
-with tab_pomodoro:
+if selected_page == "番茄钟":
     st.markdown("<div class='section-title'>番茄钟</div>", unsafe_allow_html=True)
     left, right = st.columns([1, 2])
 
@@ -246,7 +280,7 @@ with tab_pomodoro:
         total_seconds = sum(r.get("seconds", 0) for r in data["pomodoro_records"])
         h = total_seconds // 3600
         m = (total_seconds % 3600) // 60
-        st.markdown(f"<div class='focus-text'>你已专注<br>了{h}小时{m}分钟</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='focus-text'>你已专注了{h}小时{m}分钟</div>", unsafe_allow_html=True)
 
         if "pomodoro_running" not in st.session_state:
             st.session_state.pomodoro_running = False
@@ -263,7 +297,7 @@ with tab_pomodoro:
 
         preset_row1 = st.columns(3)
         preset_row2 = st.columns(3)
-        presets = [(15, "15:00"), (30, "30:00"), (60, "01:00:00"), (1, "01:00"), (5, "05:00"), (10, "10:00")]
+        presets = [(15, "15:00"), (30, "30:00"), (60, "60:00"), (1, "01:00"), (5, "05:00"), (10, "10:00")]
         for i, (mins, label) in enumerate(presets):
             cols = preset_row1 if i < 3 else preset_row2
             with cols[i % 3]:
@@ -304,8 +338,7 @@ with tab_pomodoro:
                 time.sleep(1)
                 st.experimental_rerun()
 
-
-with tab_stats:
+if selected_page == "统计":
     st.markdown("<div class='section-title'>统计</div>", unsafe_allow_html=True)
     totals = {c: 0 for c in CATEGORIES}
     for ev in data["events"]:
@@ -321,14 +354,14 @@ with tab_stats:
 
     fig_col1, fig_col2 = st.columns(2)
     with fig_col1:
-        fig, ax = plt.subplots(figsize=(4.5, 3.5))
+        fig, ax = plt.subplots(figsize=(5, 4))
         ax.bar(totals.keys(), totals.values(), color=[CATEGORY_COLORS[c] for c in totals.keys()])
         ax.set_ylabel("分钟")
         ax.set_title("本周分类时长")
-        st.pyplot(fig)
+        st.pyplot(fig, use_container_width=True)
 
     with fig_col2:
-        fig, ax = plt.subplots(figsize=(4.5, 3.5))
+        fig, ax = plt.subplots(figsize=(5, 4))
         values = [v for v in totals.values() if v > 0]
         labels = [k for k, v in totals.items() if v > 0]
         if values:
@@ -336,10 +369,9 @@ with tab_stats:
         else:
             ax.text(0.5, 0.5, "暂无数据", ha="center", va="center")
         ax.set_title("分类占比")
-        st.pyplot(fig)
+        st.pyplot(fig, use_container_width=True)
 
-
-with tab_archive:
+if selected_page == "往期回顾":
     st.markdown("<div class='section-title'>往期回顾</div>", unsafe_allow_html=True)
     with st.form("add_archive"):
         a_date = st.date_input("日期", value=date.today(), key="archive_date")

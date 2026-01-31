@@ -9,7 +9,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk, messagebox, filedialog
 
-APP_TITLE = "王俊腾的家"
+APP_TITLE = "My Diary"
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 DATA_FILE = os.path.join(DATA_DIR, "storage.json")
 
@@ -423,7 +423,7 @@ class App(tk.Tk):
             child.destroy()
 
         min_col_width = 70
-        row_height = 40
+        row_height = 60
         left_margin = 70
         top_margin = 10
 
@@ -456,7 +456,8 @@ class App(tk.Tk):
             )
             btn.grid(row=0, column=i + 1, sticky="nsew")
 
-        grid = tk.Canvas(self.week_inner, bg=self.theme["canvas_bg"], height=680, width=total_width, highlightthickness=0)
+        grid_height = max(680, int((TIME_END - TIME_START) * row_height + 40))
+        grid = tk.Canvas(self.week_inner, bg=self.theme["canvas_bg"], height=grid_height, width=total_width, highlightthickness=0)
         grid.pack(fill="both", expand=True)
         self.week_grid = grid
 
@@ -506,7 +507,7 @@ class App(tk.Tk):
                 event = layout["event"]
                 start_minutes = self._to_minutes(event["start"])
                 end_minutes = self._to_minutes(event["end"])
-                duration = max(end_minutes - start_minutes, 30)
+                duration = max(end_minutes - start_minutes, 45)
                 start_y = top_margin + (start_minutes / 60 - TIME_START) * row_height
                 end_y = start_y + (duration / 60) * row_height
                 total_width = col_width - 8
@@ -709,7 +710,7 @@ class App(tk.Tk):
 
         self.pomodoro_focus_label = ttk.Label(
             timer_panel,
-            text="你已专注\n了0小时0分钟",
+            text="你已专注了0小时0分钟",
             font=("Microsoft YaHei", 14, "bold"),
             anchor="e",
             justify="right",
@@ -731,7 +732,7 @@ class App(tk.Tk):
         )
         self._draw_pomodoro_ring()
 
-        presets_row1 = [(15, "15:00"), (30, "30:00"), (60, "01:00:00")]
+        presets_row1 = [(15, "15:00"), (30, "30:00"), (60, "60:00")]
         presets_row2 = [(1, "01:00"), (5, "05:00"), (10, "10:00")]
         btn_row1 = ttk.Frame(center_panel)
         btn_row1.pack()
@@ -891,25 +892,21 @@ class App(tk.Tk):
         total_seconds = sum(self.pomodoro_records_seconds)
         hours = total_seconds // 3600
         minutes = (total_seconds % 3600) // 60
-        text = f"你已专注\n了{hours}小时{minutes}分钟"
+        text = f"你已专注了{hours}小时{minutes}分钟"
         if hasattr(self, "pomodoro_focus_label"):
             self.pomodoro_focus_label.config(text=text)
 
     def _format_seconds(self, total: int) -> str:
         total = max(0, int(total))
-        h = total // 3600
-        m = (total % 3600) // 60
+        m = total // 60
         s = total % 60
-        if h > 0:
-            return f"{h:02d}:{m:02d}:{s:02d}"
         return f"{m:02d}:{s:02d}"
 
     def _update_pomodoro_display(self):
         total = max(0, self.pomodoro_remaining)
-        h = total // 3600
-        m = (total % 3600) // 60
+        m = total // 60
         s = total % 60
-        text = f"{h:02d}:{m:02d}:{s:02d}"
+        text = f"{m:02d}:{s:02d}"
         if hasattr(self, "pomodoro_canvas"):
             self.pomodoro_canvas.itemconfig(self.pomodoro_time_text, text=text, fill=self.theme["fg"])
 
@@ -1024,7 +1021,7 @@ class App(tk.Tk):
             row = slot // 7
             col = slot % 7
 
-            cell = ttk.Frame(cal, relief="ridge")
+            cell = ttk.Frame(cal, relief="solid", borderwidth=1)
             cell.grid(row=row, column=col, sticky="nsew", padx=2, pady=2)
             cell.grid_propagate(False)
 
@@ -1041,18 +1038,15 @@ class App(tk.Tk):
             date_chip.pack(anchor="nw", padx=4, pady=4)
             mood = self.storage.data.get("moods", {}).get(current.strftime("%Y-%m-%d"), "")
             label_text = f"{day_cursor} {mood}" if mood else str(day_cursor)
-            tk.Label(date_chip, text=label_text, bg=self.theme["month_date_bg"], fg=self.theme["fg"]).pack(padx=4, pady=1)
+            label = tk.Label(date_chip, text=label_text, bg=self.theme["month_date_bg"], fg=self.theme["fg"])
+            label.pack(padx=4, pady=1)
 
-            events_wrap = ttk.Frame(cell)
-            events_wrap.pack(fill="x", padx=4, pady=(2, 4))
+            def _open_day(_event, target=current):
+                self._open_day_from_month(target)
 
-            items = self._events_on_day(current)
-            for ev in items[:2]:
-                color = CATEGORY_COLORS.get(ev["category"], "#E8E8E8")
-                self._create_rounded_event_tag(events_wrap, ev["title"], color)
-
-            btn = ttk.Button(cell, text="查看", style="Mini.TButton", width=4, command=lambda d=current: self._open_day_from_month(d))
-            btn.place(relx=1.0, rely=1.0, anchor="se", x=-6, y=-6)
+            cell.bind("<Button-1>", _open_day)
+            date_chip.bind("<Button-1>", _open_day)
+            label.bind("<Button-1>", _open_day)
 
             day_cursor += 1
 
