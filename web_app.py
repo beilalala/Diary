@@ -4,31 +4,14 @@ import os
 import uuid
 import time
 import math
+import hashlib
 from datetime import datetime, date, timedelta
 import plotly.graph_objects as go
 
 
-def require_password():
-    password = st.secrets.get("APP_PASSWORD", "")
-    if "password_ok" not in st.session_state:
-        st.session_state.password_ok = False
-
-    if st.session_state.password_ok:
-        return
-
-    st.title("轻量日程管理 — 访问验证")
-    st.text_input("请输入访问密码", type="password", key="password_input")
-    if st.button("进入"):
-        if st.session_state.password_input == password and password:
-            st.session_state.password_ok = True
-            st.experimental_rerun()
-        else:
-            st.error("密码错误")
-    st.stop()
-
-
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-DATA_FILE = os.path.join(DATA_DIR, "storage.json")
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
+USER_DATA_DIR = os.path.join(DATA_DIR, "users")
 
 CATEGORIES = ["生活", "学习", "班团事务", "运动", "其他"]
 CATEGORY_COLORS = {
@@ -51,16 +34,16 @@ MOODS = [
 ]
 
 
-def ensure_data_file():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
+def ensure_data_file(file_path: str):
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    if not os.path.exists(file_path):
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump({"events": [], "archives": [], "moods": {}, "pomodoro_records": []}, f, ensure_ascii=False, indent=2)
 
 
-def load_data():
-    ensure_data_file()
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
+def load_data(file_path: str):
+    ensure_data_file(file_path)
+    with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     data.setdefault("events", [])
     data.setdefault("archives", [])
@@ -69,9 +52,32 @@ def load_data():
     return data
 
 
-def save_data(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+def save_data(data, file_path: str):
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def load_users():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_users(users: dict):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+
+def hash_password(password: str, salt: str) -> str:
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return digest.hex()
+
+
+def verify_password(password: str, salt: str, stored_hash: str) -> bool:
+    return hash_password(password, salt) == stored_hash
 
 
 def iso_week_start(d: date):
@@ -147,7 +153,6 @@ DAY_HEIGHT = (TIME_END - TIME_START) * HOUR_HEIGHT
 
 
 st.set_page_config(page_title="My Diary", layout="wide")
-require_password()
 
 st.markdown(
     """
@@ -175,7 +180,54 @@ body { background-color: #EEF5FF; }
     unsafe_allow_html=True,
 )
 
-data = load_data()
+if "user" not in st.session_state:
+    st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
+    st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
+
+    login_tab, register_tab = st.tabs(["登录", "注册"])
+
+    with login_tab:
+        st.markdown("#### 登录")
+        login_user = st.text_input("用户名", key="login_user")
+        login_pass = st.text_input("密码", type="password", key="login_pass")
+        if st.button("登录", key="login_btn"):
+            users = load_users()
+            info = users.get(login_user)
+            if not info:
+                st.error("用户不存在")
+            else:
+                if verify_password(login_pass, info["salt"], info["hash"]):
+                    st.session_state.user = login_user
+                    st.experimental_rerun()
+                else:
+                    st.error("密码错误")
+
+    with register_tab:
+        st.markdown("#### 注册")
+        reg_user = st.text_input("用户名", key="reg_user")
+        reg_pass = st.text_input("密码", type="password", key="reg_pass")
+        reg_pass2 = st.text_input("确认密码", type="password", key="reg_pass2")
+        if st.button("注册", key="reg_btn"):
+            users = load_users()
+            if not reg_user.strip():
+                st.error("请输入用户名")
+            elif reg_user in users:
+                st.error("用户名已存在")
+            elif len(reg_pass) < 6:
+                st.error("密码至少 6 位")
+            elif reg_pass != reg_pass2:
+                st.error("两次密码不一致")
+            else:
+                salt = uuid.uuid4().hex
+                users[reg_user] = {"salt": salt, "hash": hash_password(reg_pass, salt)}
+                save_users(users)
+                user_file = os.path.join(USER_DATA_DIR, f"{reg_user}.json")
+                ensure_data_file(user_file)
+                st.success("注册成功，请登录")
+    st.stop()
+
+user_data_file = os.path.join(USER_DATA_DIR, f"{st.session_state.user}.json")
+data = load_data(user_data_file)
 
 st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
@@ -189,7 +241,7 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
             if st.button(mood, key=f"mood_{i}"):
                 emoji = mood.split(" ")[-1]
                 data["moods"][today_key] = emoji
-                save_data(data)
+                save_data(data, user_data_file)
                 st.experimental_rerun()
     if st.button("跳过"):
         st.session_state.mood_skipped = True
@@ -269,7 +321,7 @@ if not st.session_state.sidebar_collapsed:
                     "notes": notes.strip(),
                 }
                 data["events"].append(new)
-                save_data(data)
+                save_data(data, user_data_file)
                 st.success("已保存")
 
 
@@ -424,7 +476,7 @@ if selected_page == "番茄钟":
                         "seconds": st.session_state.pomodoro_duration,
                     }
                     data["pomodoro_records"].append(rec)
-                    save_data(data)
+                    save_data(data, user_data_file)
             st.session_state.pomodoro_running = False
             st.session_state.pomodoro_start = None
             st.session_state.pomodoro_duration = 0
@@ -437,7 +489,7 @@ if selected_page == "番茄钟":
                     "seconds": st.session_state.pomodoro_duration,
                 }
                 data["pomodoro_records"].append(rec)
-                save_data(data)
+                save_data(data, user_data_file)
                 st.session_state.pomodoro_running = False
                 st.session_state.pomodoro_start = None
                 st.session_state.pomodoro_duration = 0
@@ -520,7 +572,7 @@ if selected_page == "往期回顾":
                 "category": a_cat,
                 "text": a_text.strip(),
             })
-            save_data(data)
+            save_data(data, user_data_file)
             st.success("已保存")
 
     for item in sorted(data.get("archives", []), key=lambda x: x["date"], reverse=True):
@@ -528,5 +580,5 @@ if selected_page == "往期回顾":
             st.write(item.get("text", ""))
             if st.button("删除", key=f"del_arc_{item['id']}"):
                 data["archives"] = [a for a in data["archives"] if a["id"] != item["id"]]
-                save_data(data)
+                save_data(data, user_data_file)
                 st.experimental_rerun()
