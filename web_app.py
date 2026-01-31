@@ -5,8 +5,7 @@ import uuid
 import time
 import math
 from datetime import datetime, date, timedelta
-import matplotlib.pyplot as plt
-from matplotlib import rcParams
+import plotly.graph_objects as go
 
 
 def require_password():
@@ -89,6 +88,51 @@ def next_month(d: date):
     return date(d.year, d.month + 1, 1)
 
 
+def to_minutes(time_str: str) -> int:
+    h, m = map(int, time_str.split(":"))
+    return h * 60 + m
+
+
+def layout_day_events(events):
+    if not events:
+        return []
+    items = []
+    for ev in sorted(events, key=lambda x: x["start"]):
+        start = to_minutes(ev["start"])
+        end = to_minutes(ev["end"])
+        if end <= start:
+            end += 24 * 60
+        items.append({"event": ev, "start": start, "end": end})
+
+    layouts = []
+    cluster = []
+    active = []
+
+    def flush_cluster():
+        if not cluster:
+            return
+        max_cols = max(item["col"] for item in cluster) + 1
+        for item in cluster:
+            item["cols"] = max_cols
+            layouts.append(item)
+
+    for item in items:
+        active = [a for a in active if a["end"] > item["start"]]
+        if not active:
+            flush_cluster()
+            cluster = []
+        used = {a["col"] for a in active}
+        col = 0
+        while col in used:
+            col += 1
+        entry = {"event": item["event"], "start": item["start"], "end": item["end"], "col": col, "cols": 1}
+        active.append(entry)
+        cluster.append(entry)
+
+    flush_cluster()
+    return layouts
+
+
 def format_seconds(total: int) -> str:
     total = max(0, int(total))
     m = total // 60
@@ -96,8 +140,11 @@ def format_seconds(total: int) -> str:
     return f"{m:02d}:{s:02d}"
 
 
-rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Arial Unicode MS", "DejaVu Sans"]
-rcParams["axes.unicode_minus"] = False
+TIME_START = 6
+TIME_END = 22
+HOUR_HEIGHT = 40
+DAY_HEIGHT = (TIME_END - TIME_START) * HOUR_HEIGHT
+
 
 st.set_page_config(page_title="My Diary", layout="wide")
 require_password()
@@ -120,6 +167,9 @@ body { background-color: #EEF5FF; }
 .event-time { font-weight: 700; color: #1F3B57; margin-right: 6px; }
 .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
 .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
+.day-timeline { position: relative; height: 640px; border: 1px solid #E2EAF5; border-radius: 12px; background: #FFFFFF; background-image: repeating-linear-gradient(to bottom, #EEF2F7 0, #EEF2F7 1px, transparent 1px, transparent 40px); }
+.event-block { position: absolute; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; font-size: 12px; color: #1F3B57; overflow: hidden; }
+.event-block-time { font-weight: 700; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -128,7 +178,7 @@ body { background-color: #EEF5FF; }
 data = load_data()
 
 st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
-st.markdown("<div class='subtitle'>轻量 · 舒适 · 便捷 · 治愈</div>", unsafe_allow_html=True)
+st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
 
 today_key = date.today().strftime("%Y-%m-%d")
 if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped"):
@@ -192,38 +242,35 @@ for i, name in enumerate(PAGES):
 
 selected_page = st.session_state.page
 
-if st.session_state.sidebar_collapsed:
-    if st.button("打开日程", key="expand_sidebar"):
-        st.session_state.sidebar_collapsed = False
-        st.experimental_rerun()
-
 if not st.session_state.sidebar_collapsed:
     with st.sidebar:
-        if st.button("× 收起", key="collapse_sidebar"):
-            st.session_state.sidebar_collapsed = True
-            st.experimental_rerun()
-        with st.expander("添加日程", expanded=st.session_state.page == "周视图"):
-            with st.form("add_event"):
-                t = st.text_input("名称", value="新日程")
-                d = st.date_input("日期", value=date.today())
-                start = st.time_input("开始时间", value=datetime.strptime("09:00", "%H:%M").time())
-                end = st.time_input("结束时间", value=datetime.strptime("10:00", "%H:%M").time())
-                cat = st.selectbox("类型", CATEGORIES)
-                notes = st.text_area("备注（可选）")
-                submitted = st.form_submit_button("保存")
-                if submitted:
-                    new = {
-                        "id": str(uuid.uuid4()),
-                        "title": t.strip() or "未命名",
-                        "date": d.strftime("%Y-%m-%d"),
-                        "start": start.strftime("%H:%M"),
-                        "end": end.strftime("%H:%M"),
-                        "category": cat,
-                        "notes": notes.strip(),
-                    }
-                    data["events"].append(new)
-                    save_data(data)
-                    st.success("已保存")
+        close_row = st.columns([8, 1])
+        with close_row[1]:
+            if st.button("×", key="collapse_sidebar"):
+                st.session_state.sidebar_collapsed = True
+                st.experimental_rerun()
+        st.markdown("### 添加日程")
+        with st.form("add_event"):
+            t = st.text_input("名称", value="新日程")
+            d = st.date_input("日期", value=date.today())
+            start = st.time_input("开始时间", value=datetime.strptime("09:00", "%H:%M").time())
+            end = st.time_input("结束时间", value=datetime.strptime("10:00", "%H:%M").time())
+            cat = st.selectbox("类型", CATEGORIES)
+            notes = st.text_area("备注（可选）")
+            submitted = st.form_submit_button("保存")
+            if submitted:
+                new = {
+                    "id": str(uuid.uuid4()),
+                    "title": t.strip() or "未命名",
+                    "date": d.strftime("%Y-%m-%d"),
+                    "start": start.strftime("%H:%M"),
+                    "end": end.strftime("%H:%M"),
+                    "category": cat,
+                    "notes": notes.strip(),
+                }
+                data["events"].append(new)
+                save_data(data)
+                st.success("已保存")
 
 
 if selected_page == "周视图":
@@ -253,14 +300,34 @@ if selected_page == "周视图":
             if not events:
                 st.caption("无日程")
             else:
-                for ev in sorted(events, key=lambda x: x["start"]):
-                    c = CATEGORY_COLORS.get(ev.get("category", "其他"), "#EEE")
-                    st.markdown(
-                        f"<div class='event-card' style='border-color:{c};'>"
-                        f"<span class='event-time'>{ev['start']}-{ev['end']}</span>{ev['title']}"
-                        f"</div>",
-                        unsafe_allow_html=True,
+                layouts = layout_day_events(events)
+                html_blocks = ["<div class='day-timeline'>"]
+                range_start = TIME_START * 60
+                range_end = TIME_END * 60
+                for item in layouts:
+                    ev = item["event"]
+                    start = item["start"]
+                    end = item["end"]
+                    if end <= range_start or start >= range_end:
+                        continue
+                    start = max(start, range_start)
+                    end = min(end, range_end)
+                    duration = max(30, end - start)
+                    top = int((start - range_start) / (range_end - range_start) * DAY_HEIGHT)
+                    height = max(36, int(duration / (range_end - range_start) * DAY_HEIGHT))
+                    color = CATEGORY_COLORS.get(ev.get("category", "其他"), "#E8E0FF")
+                    left_pct = item["col"] / item["cols"] * 100
+                    width_pct = 100 / item["cols"]
+                    html_blocks.append(
+                        "<div class='event-block' "
+                        f"style='top:{top}px; height:{height}px; left:{left_pct}%; width:calc({width_pct}% - 6px); "
+                        f"background:{color}; border-color:{color};'>"
+                        f"<div class='event-block-time'>{ev['start']}-{ev['end']}</div>"
+                        f"<div>{ev['title']}</div>"
+                        "</div>"
                     )
+                html_blocks.append("</div>")
+                st.markdown("".join(html_blocks), unsafe_allow_html=True)
 
     if flash_target and flash_step < 4:
         time.sleep(0.25)
@@ -395,22 +462,49 @@ if selected_page == "统计":
 
     fig_col1, fig_col2 = st.columns(2)
     with fig_col1:
-        fig, ax = plt.subplots(figsize=(5, 4))
-        ax.bar(totals.keys(), totals.values(), color=[CATEGORY_COLORS[c] for c in totals.keys()])
-        ax.set_ylabel("分钟")
-        ax.set_title("本周分类时长")
-        st.pyplot(fig, use_container_width=True)
+        bar_fig = go.Figure(
+            data=[
+                go.Bar(
+                    x=list(totals.keys()),
+                    y=list(totals.values()),
+                    marker_color=[CATEGORY_COLORS[c] for c in totals.keys()],
+                )
+            ]
+        )
+        bar_fig.update_layout(
+            title="本周分类时长",
+            yaxis_title="分钟",
+            height=360,
+            margin=dict(l=40, r=20, t=60, b=40),
+            font=dict(family="Microsoft YaHei, SimHei, Arial", size=14),
+        )
+        st.plotly_chart(bar_fig, use_container_width=True)
 
     with fig_col2:
-        fig, ax = plt.subplots(figsize=(5, 4))
         values = [v for v in totals.values() if v > 0]
         labels = [k for k, v in totals.items() if v > 0]
         if values:
-            ax.pie(values, labels=labels, autopct="%1.0f%%")
+            pie_fig = go.Figure(
+                data=[
+                    go.Pie(
+                        labels=labels,
+                        values=values,
+                        textinfo="percent",
+                        insidetextorientation="radial",
+                        marker=dict(colors=[CATEGORY_COLORS[k] for k in labels]),
+                    )
+                ]
+            )
         else:
-            ax.text(0.5, 0.5, "暂无数据", ha="center", va="center")
-        ax.set_title("分类占比")
-        st.pyplot(fig, use_container_width=True)
+            pie_fig = go.Figure()
+            pie_fig.add_annotation(text="暂无数据", x=0.5, y=0.5, showarrow=False)
+        pie_fig.update_layout(
+            title="分类占比",
+            height=360,
+            margin=dict(l=20, r=20, t=60, b=40),
+            font=dict(family="Microsoft YaHei, SimHei, Arial", size=14),
+        )
+        st.plotly_chart(pie_fig, use_container_width=True)
 
 if selected_page == "往期回顾":
     st.markdown("<div class='section-title'>往期回顾</div>", unsafe_allow_html=True)
