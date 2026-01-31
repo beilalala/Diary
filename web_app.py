@@ -150,38 +150,80 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
 PAGES = ["周视图", "月视图", "番茄钟", "统计", "往期回顾"]
 if "page" not in st.session_state:
     st.session_state.page = "周视图"
+if "pending_page" in st.session_state:
+    st.session_state.page = st.session_state.pending_page
+    del st.session_state.pending_page
 if "week_flash_target" not in st.session_state:
     st.session_state.week_flash_target = None
     st.session_state.week_flash_step = 0
     st.session_state.week_flash_on = False
+if "sidebar_collapsed" not in st.session_state:
+    st.session_state.sidebar_collapsed = False
+if "last_page" not in st.session_state:
+    st.session_state.last_page = st.session_state.page
 
-page_index = PAGES.index(st.session_state.page) if st.session_state.page in PAGES else 0
-selected_page = st.radio("导航", PAGES, horizontal=True, index=page_index, key="page_selector")
-st.session_state.page = selected_page
+if st.session_state.page != st.session_state.last_page:
+    if st.session_state.page == "周视图":
+        st.session_state.sidebar_collapsed = False
+    else:
+        st.session_state.sidebar_collapsed = True
+    st.session_state.last_page = st.session_state.page
 
-with st.sidebar:
-    with st.expander("添加日程", expanded=st.session_state.page == "周视图"):
-        with st.form("add_event"):
-            t = st.text_input("名称", value="新日程")
-            d = st.date_input("日期", value=date.today())
-            start = st.time_input("开始时间", value=datetime.strptime("09:00", "%H:%M").time())
-            end = st.time_input("结束时间", value=datetime.strptime("10:00", "%H:%M").time())
-            cat = st.selectbox("类型", CATEGORIES)
-            notes = st.text_area("备注（可选）")
-            submitted = st.form_submit_button("保存")
-            if submitted:
-                new = {
-                    "id": str(uuid.uuid4()),
-                    "title": t.strip() or "未命名",
-                    "date": d.strftime("%Y-%m-%d"),
-                    "start": start.strftime("%H:%M"),
-                    "end": end.strftime("%H:%M"),
-                    "category": cat,
-                    "notes": notes.strip(),
-                }
-                data["events"].append(new)
-                save_data(data)
-                st.success("已保存")
+if st.session_state.sidebar_collapsed:
+    st.markdown(
+        """
+<style>
+section[data-testid="stSidebar"] { display: none; }
+section.main { margin-left: 0 !important; }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+nav_cols = st.columns(len(PAGES))
+for i, name in enumerate(PAGES):
+    with nav_cols[i]:
+        btn_type = "primary" if st.session_state.page == name else "secondary"
+        if st.button(name, key=f"nav_{name}", type=btn_type):
+            st.session_state.page = name
+            if name != "周视图":
+                st.session_state.sidebar_collapsed = True
+            st.experimental_rerun()
+
+selected_page = st.session_state.page
+
+if st.session_state.sidebar_collapsed:
+    if st.button("打开日程", key="expand_sidebar"):
+        st.session_state.sidebar_collapsed = False
+        st.experimental_rerun()
+
+if not st.session_state.sidebar_collapsed:
+    with st.sidebar:
+        if st.button("× 收起", key="collapse_sidebar"):
+            st.session_state.sidebar_collapsed = True
+            st.experimental_rerun()
+        with st.expander("添加日程", expanded=st.session_state.page == "周视图"):
+            with st.form("add_event"):
+                t = st.text_input("名称", value="新日程")
+                d = st.date_input("日期", value=date.today())
+                start = st.time_input("开始时间", value=datetime.strptime("09:00", "%H:%M").time())
+                end = st.time_input("结束时间", value=datetime.strptime("10:00", "%H:%M").time())
+                cat = st.selectbox("类型", CATEGORIES)
+                notes = st.text_area("备注（可选）")
+                submitted = st.form_submit_button("保存")
+                if submitted:
+                    new = {
+                        "id": str(uuid.uuid4()),
+                        "title": t.strip() or "未命名",
+                        "date": d.strftime("%Y-%m-%d"),
+                        "start": start.strftime("%H:%M"),
+                        "end": end.strftime("%H:%M"),
+                        "category": cat,
+                        "notes": notes.strip(),
+                    }
+                    data["events"].append(new)
+                    save_data(data)
+                    st.success("已保存")
 
 
 if selected_page == "周视图":
@@ -255,8 +297,7 @@ if selected_page == "月视图":
                 label = f"{day_cursor} {mood}" if mood else f"{day_cursor}"
                 clicked = st.button(label, key=f"month_day_{current.strftime('%Y%m%d')}", use_container_width=True)
                 if clicked:
-                    st.session_state.page = "周视图"
-                    st.session_state.page_selector = "周视图"
+                    st.session_state.pending_page = "周视图"
                     st.session_state.week_pick = current
                     st.session_state.week_flash_target = current.strftime("%Y-%m-%d")
                     st.session_state.week_flash_step = 0
