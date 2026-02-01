@@ -265,6 +265,11 @@ body { background-color: #EEF5FF; }
 .focus-text { font-size: 20px; font-weight: 700; color: #1F3B57; text-align: right; }
 .week-day-card { padding: 8px 10px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; margin-bottom: 6px; }
 .week-day-card.flash-on { background: #C9D6F2; border-color: #9CB4E0; }
+.week-day-btn .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; white-space: pre-line; }
+.week-day-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
+.week-day-btn.flash-on .stButton > button { background: #C9D6F2; border-color: #9CB4E0; }
+.detail-event-btn .stButton > button { width: 100%; text-align: left; border: 1px solid #E2EAF5; border-radius: 10px; background: #FFFFFF; padding: 8px 10px; }
+.detail-event-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .event-card { background: #FFFFFF; border-radius: 10px; padding: 8px 10px; margin: 6px 0; border: 1px solid #E2EAF5; font-size: 14px; }
 .event-time { font-weight: 700; color: #1F3B57; margin-right: 6px; }
 .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
@@ -273,8 +278,6 @@ body { background-color: #EEF5FF; }
 .event-block { position: absolute; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; font-size: 12px; color: #1F3B57; overflow: hidden; }
 .event-block-time { font-weight: 700; }
 .week-day-title { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; }
-.week-day-link { display: block; text-decoration: none; color: inherit; }
-.week-day-link:focus, .week-day-link:hover { text-decoration: none; }
 .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .month-cell { display: block; padding: 10px 8px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; text-align: center; color: #1F3B57; text-decoration: none; font-weight: 600; }
 .month-cell.good { background: #E7F7E8; }
@@ -446,21 +449,6 @@ if "jump_day" in st.query_params:
     except Exception:
         st.query_params.clear()
 
-if "day_detail" in st.query_params:
-    detail_value = st.query_params.get("day_detail")
-    try:
-        detail_day = datetime.strptime(detail_value, "%Y-%m-%d").date()
-        st.session_state.pending_page = "周视图"
-        st.session_state.week_pick = detail_day
-        st.session_state.week_flash_target = detail_day.strftime("%Y-%m-%d")
-        st.session_state.week_flash_step = 0
-        st.session_state.week_flash_on = True
-        st.session_state.day_detail_date = detail_day.strftime("%Y-%m-%d")
-        st.query_params.clear()
-        safe_rerun()
-    except Exception:
-        st.query_params.clear()
-
 if st.session_state.page != st.session_state.last_page:
     if st.session_state.page == "周视图":
         st.session_state.sidebar_collapsed = False
@@ -521,11 +509,6 @@ elif st.session_state.event_form_bound_id is not None:
 
 if not st.session_state.sidebar_collapsed:
     with st.sidebar:
-        close_row = st.columns([8, 1])
-        with close_row[1]:
-            if st.button("×", key="collapse_sidebar"):
-                st.session_state.sidebar_collapsed = True
-                safe_rerun()
         edit_mode = st.session_state.editing_event_id is not None
         st.markdown("### 编辑日程" if edit_mode else "### 添加日程")
         with st.form("add_event"):
@@ -591,16 +574,11 @@ if selected_page == "周视图":
         events = [e for e in data["events"] if e["date"] == day_key]
         with day_cols[i]:
             is_flash = flash_target == day_key and flash_on
-            card_class = "week-day-card flash-on" if is_flash else "week-day-card"
-            st.markdown(
-                f"<a class='week-day-link' href='?day_detail={day_key}'>"
-                f"<div class='{card_class}'>"
-                f"<div class='week-day-title'>{WEEKDAY_FULL_NAMES[d.weekday()]}</div>"
-                f"<div>{d.strftime('%m/%d')}</div>"
-                f"</div>"
-                f"</a>",
-                unsafe_allow_html=True,
-            )
+            container_class = "week-day-btn flash-on" if is_flash else "week-day-btn"
+            st.markdown(f"<div class='{container_class}'>", unsafe_allow_html=True)
+            if st.button(f"{WEEKDAY_FULL_NAMES[d.weekday()]}\n{d.strftime('%m/%d')}", key=f"day_card_{day_key}"):
+                st.session_state.day_detail_date = day_key
+            st.markdown("</div>", unsafe_allow_html=True)
             if not events:
                 st.caption("无日程")
             else:
@@ -656,17 +634,18 @@ if selected_page == "周视图":
                 st.info("暂无日程")
                 return
             for ev in detail_events:
-                st.markdown("<div class='detail-card'>", unsafe_allow_html=True)
+                st.markdown("<div class='detail-event-btn'>", unsafe_allow_html=True)
                 if st.button(f"{ev['start']} - {ev['end']}  {ev['title']}", key=f"pick_event_{ev['id']}"):
                     st.session_state.editing_event_id = ev["id"]
                     st.session_state.sidebar_collapsed = False
                     _bind_event_form(ev)
                     st.session_state.day_detail_date = None
                     safe_rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
                 st.write(f"类型：{ev.get('category', '其他')}")
                 notes = ev.get("notes", "").strip()
                 st.write(f"备注：{notes if notes else '无'}")
-                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
         if hasattr(st, "dialog"):
             @st.dialog("日程详情")
