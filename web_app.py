@@ -7,11 +7,14 @@ import math
 import hashlib
 from datetime import datetime, date, timedelta
 import plotly.graph_objects as go
+from supabase import create_client, Client
 
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 USER_DATA_DIR = os.path.join(DATA_DIR, "users")
+
+DEFAULT_DATA = {"events": [], "archives": [], "moods": {}, "pomodoro_records": []}
 
 CATEGORIES = ["生活", "学习", "班团事务", "运动", "其他"]
 CATEGORY_COLORS = {
@@ -38,7 +41,7 @@ def ensure_data_file(file_path: str):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     if not os.path.exists(file_path):
         with open(file_path, "w", encoding="utf-8") as f:
-            json.dump({"events": [], "archives": [], "moods": {}, "pomodoro_records": []}, f, ensure_ascii=False, indent=2)
+            json.dump(DEFAULT_DATA, f, ensure_ascii=False, indent=2)
 
 
 def load_data(file_path: str):
@@ -78,6 +81,63 @@ def hash_password(password: str, salt: str) -> str:
 
 def verify_password(password: str, salt: str, stored_hash: str) -> bool:
     return hash_password(password, salt) == stored_hash
+
+
+def get_supabase_client() -> Client | None:
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY")
+    if not url or not key:
+        return None
+    return create_client(url, key)
+
+
+def get_storage_mode() -> str:
+    return "supabase" if get_supabase_client() else "local"
+
+
+def db_get_user(username: str):
+    client = get_supabase_client()
+    if not client:
+        return None
+    res = client.table("user_accounts").select("id, username, salt, hash").eq("username", username).limit(1).execute()
+    return res.data[0] if res.data else None
+
+
+def db_create_user(username: str, password: str):
+    client = get_supabase_client()
+    if not client:
+        return None
+    salt = uuid.uuid4().hex
+    hashed = hash_password(password, salt)
+    user_res = client.table("user_accounts").insert({"username": username, "salt": salt, "hash": hashed}).execute()
+    user = user_res.data[0] if user_res.data else None
+    if user:
+        client.table("user_data").upsert({"user_id": user["id"], "data": DEFAULT_DATA}).execute()
+    return user
+
+
+def db_load_user_data(user_id: str):
+    client = get_supabase_client()
+    if not client:
+        return DEFAULT_DATA.copy()
+    res = client.table("user_data").select("data").eq("user_id", user_id).limit(1).execute()
+    if res.data:
+        data = res.data[0].get("data") or {}
+    else:
+        client.table("user_data").upsert({"user_id": user_id, "data": DEFAULT_DATA}).execute()
+        data = DEFAULT_DATA.copy()
+    data.setdefault("events", [])
+    data.setdefault("archives", [])
+    data.setdefault("moods", {})
+    data.setdefault("pomodoro_records", [])
+    return data
+
+
+def db_save_user_data(user_id: str, data: dict):
+    client = get_supabase_client()
+    if not client:
+        return
+    client.table("user_data").upsert({"user_id": user_id, "data": data}).execute()
 
 
 def iso_week_start(d: date):
@@ -180,6 +240,8 @@ body { background-color: #EEF5FF; }
     unsafe_allow_html=True,
 )
 
+storage_mode = get_storage_mode()
+
 if "user" not in st.session_state:
     st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
     st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
@@ -191,16 +253,27 @@ if "user" not in st.session_state:
         login_user = st.text_input("用户名", key="login_user")
         login_pass = st.text_input("密码", type="password", key="login_pass")
         if st.button("登录", key="login_btn"):
-            users = load_users()
-            info = users.get(login_user)
-            if not info:
-                st.error("用户不存在")
-            else:
-                if verify_password(login_pass, info["salt"], info["hash"]):
+            if storage_mode == "supabase":
+                info = db_get_user(login_user)
+                if not info:
+                    st.error("用户不存在")
+                elif verify_password(login_pass, info["salt"], info["hash"]):
                     st.session_state.user = login_user
+                    st.session_state.user_id = info["id"]
                     st.experimental_rerun()
                 else:
                     st.error("密码错误")
+            else:
+                users = load_users()
+                info = users.get(login_user)
+                if not info:
+                    st.error("用户不存在")
+                else:
+                    if verify_password(login_pass, info["salt"], info["hash"]):
+                        st.session_state.user = login_user
+                        st.experimental_rerun()
+                    else:
+                        st.error("密码错误")
 
     with register_tab:
         st.markdown("#### 注册")
@@ -208,26 +281,53 @@ if "user" not in st.session_state:
         reg_pass = st.text_input("密码", type="password", key="reg_pass")
         reg_pass2 = st.text_input("确认密码", type="password", key="reg_pass2")
         if st.button("注册", key="reg_btn"):
-            users = load_users()
             if not reg_user.strip():
                 st.error("请输入用户名")
-            elif reg_user in users:
-                st.error("用户名已存在")
             elif len(reg_pass) < 6:
                 st.error("密码至少 6 位")
             elif reg_pass != reg_pass2:
                 st.error("两次密码不一致")
             else:
-                salt = uuid.uuid4().hex
-                users[reg_user] = {"salt": salt, "hash": hash_password(reg_pass, salt)}
-                save_users(users)
-                user_file = os.path.join(USER_DATA_DIR, f"{reg_user}.json")
-                ensure_data_file(user_file)
-                st.success("注册成功，请登录")
+                if storage_mode == "supabase":
+                    existing = db_get_user(reg_user)
+                    if existing:
+                        st.error("用户名已存在")
+                    else:
+                        user = db_create_user(reg_user, reg_pass)
+                        if user:
+                            st.success("注册成功，请登录")
+                        else:
+                            st.error("注册失败，请稍后重试")
+                else:
+                    users = load_users()
+                    if reg_user in users:
+                        st.error("用户名已存在")
+                    else:
+                        salt = uuid.uuid4().hex
+                        users[reg_user] = {"salt": salt, "hash": hash_password(reg_pass, salt)}
+                        save_users(users)
+                        user_file = os.path.join(USER_DATA_DIR, f"{reg_user}.json")
+                        ensure_data_file(user_file)
+                        st.success("注册成功，请登录")
     st.stop()
 
-user_data_file = os.path.join(USER_DATA_DIR, f"{st.session_state.user}.json")
-data = load_data(user_data_file)
+if storage_mode == "supabase":
+    if "user_id" not in st.session_state:
+        info = db_get_user(st.session_state.user)
+        if not info:
+            del st.session_state.user
+            st.experimental_rerun()
+        st.session_state.user_id = info["id"]
+    data = db_load_user_data(st.session_state.user_id)
+else:
+    user_data_file = os.path.join(USER_DATA_DIR, f"{st.session_state.user}.json")
+    data = load_data(user_data_file)
+
+def persist_data(payload: dict):
+    if storage_mode == "supabase":
+        db_save_user_data(st.session_state.user_id, payload)
+    else:
+        save_data(payload, user_data_file)
 
 st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
@@ -241,7 +341,7 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
             if st.button(mood, key=f"mood_{i}"):
                 emoji = mood.split(" ")[-1]
                 data["moods"][today_key] = emoji
-                save_data(data, user_data_file)
+                persist_data(data)
                 st.experimental_rerun()
     if st.button("跳过"):
         st.session_state.mood_skipped = True
@@ -321,7 +421,7 @@ if not st.session_state.sidebar_collapsed:
                     "notes": notes.strip(),
                 }
                 data["events"].append(new)
-                save_data(data, user_data_file)
+                persist_data(data)
                 st.success("已保存")
 
 
@@ -476,7 +576,7 @@ if selected_page == "番茄钟":
                         "seconds": st.session_state.pomodoro_duration,
                     }
                     data["pomodoro_records"].append(rec)
-                    save_data(data, user_data_file)
+                    persist_data(data)
             st.session_state.pomodoro_running = False
             st.session_state.pomodoro_start = None
             st.session_state.pomodoro_duration = 0
@@ -489,7 +589,7 @@ if selected_page == "番茄钟":
                     "seconds": st.session_state.pomodoro_duration,
                 }
                 data["pomodoro_records"].append(rec)
-                save_data(data, user_data_file)
+                persist_data(data)
                 st.session_state.pomodoro_running = False
                 st.session_state.pomodoro_start = None
                 st.session_state.pomodoro_duration = 0
@@ -572,7 +672,7 @@ if selected_page == "往期回顾":
                 "category": a_cat,
                 "text": a_text.strip(),
             })
-            save_data(data, user_data_file)
+            persist_data(data)
             st.success("已保存")
 
     for item in sorted(data.get("archives", []), key=lambda x: x["date"], reverse=True):
@@ -580,5 +680,5 @@ if selected_page == "往期回顾":
             st.write(item.get("text", ""))
             if st.button("删除", key=f"del_arc_{item['id']}"):
                 data["archives"] = [a for a in data["archives"] if a["id"] != item["id"]]
-                save_data(data, user_data_file)
+                persist_data(data)
                 st.experimental_rerun()
