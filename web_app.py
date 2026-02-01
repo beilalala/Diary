@@ -1,4 +1,8 @@
 import streamlit as st
+try:
+    from streamlit_autorefresh import st_autorefresh
+except Exception:
+    st_autorefresh = None
 import json
 import os
 import uuid
@@ -35,6 +39,28 @@ MOODS = [
     "混乱 😵", "犹豫 🤔", "拖延 🐌", "孤独 🏝️",
     "想念 🌙", "生气 😠", "失望 😔", "焦虑 😟",
 ]
+
+BAD_MOOD_TEXTS = {"压力大", "混乱", "犹豫", "拖延", "孤独", "想念", "生气", "失望", "焦虑"}
+WEEKDAY_FULL_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+MOOD_GOOD_BG = "#E7F7E8"
+MOOD_BAD_BG = "#FBE7E7"
+
+
+def split_mood(entry: str):
+    if " " not in entry:
+        return entry, ""
+    text, emoji = entry.rsplit(" ", 1)
+    return text, emoji
+
+
+MOOD_LABELS = {}
+BAD_MOOD_EMOJIS = set()
+for _entry in MOODS:
+    _text, _emoji = split_mood(_entry)
+    if _emoji:
+        MOOD_LABELS[_emoji] = _text
+        if _text in BAD_MOOD_TEXTS:
+            BAD_MOOD_EMOJIS.add(_emoji)
 
 
 def ensure_data_file(file_path: str):
@@ -205,6 +231,17 @@ def format_seconds(total: int) -> str:
     s = total % 60
     return f"{m:02d}:{s:02d}"
 
+def safe_rerun():
+    if hasattr(st, "rerun"):
+        st.rerun()
+    else:
+        st.experimental_rerun()
+
+def maybe_autorefresh(interval_ms: int, key: str) -> bool:
+    if st_autorefresh is not None:
+        st_autorefresh(interval=interval_ms, key=key)
+        return True
+    return False
 
 TIME_START = 6
 TIME_END = 22
@@ -235,6 +272,14 @@ body { background-color: #EEF5FF; }
 .day-timeline { position: relative; height: 640px; border: 1px solid #E2EAF5; border-radius: 12px; background: #FFFFFF; background-image: repeating-linear-gradient(to bottom, #EEF2F7 0, #EEF2F7 1px, transparent 1px, transparent 40px); }
 .event-block { position: absolute; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; font-size: 12px; color: #1F3B57; overflow: hidden; }
 .event-block-time { font-weight: 700; }
+.week-day-title { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; }
+.month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+.month-cell { display: block; padding: 10px 8px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; text-align: center; color: #1F3B57; text-decoration: none; font-weight: 600; }
+.month-cell.good { background: #E7F7E8; }
+.month-cell.bad { background: #FBE7E7; }
+.month-cell:hover { border-color: #9CB4E0; }
+.month-weekday { font-weight: 700; text-align: center; color: #51729B; }
+.detail-card { background: #FFFFFF; border-radius: 12px; padding: 10px 12px; border: 1px solid #E2EAF5; margin: 8px 0; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -260,7 +305,7 @@ if "user" not in st.session_state:
                 elif verify_password(login_pass, info["salt"], info["hash"]):
                     st.session_state.user = login_user
                     st.session_state.user_id = info["id"]
-                    st.experimental_rerun()
+                    safe_rerun()
                 else:
                     st.error("密码错误")
             else:
@@ -271,7 +316,7 @@ if "user" not in st.session_state:
                 else:
                     if verify_password(login_pass, info["salt"], info["hash"]):
                         st.session_state.user = login_user
-                        st.experimental_rerun()
+                        safe_rerun()
                     else:
                         st.error("密码错误")
 
@@ -316,7 +361,7 @@ if storage_mode == "supabase":
         info = db_get_user(st.session_state.user)
         if not info:
             del st.session_state.user
-            st.experimental_rerun()
+            safe_rerun()
         st.session_state.user_id = info["id"]
     data = db_load_user_data(st.session_state.user_id)
 else:
@@ -339,13 +384,13 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
     for i, mood in enumerate(MOODS):
         with cols[i % 8]:
             if st.button(mood, key=f"mood_{i}"):
-                emoji = mood.split(" ")[-1]
+                _, emoji = split_mood(mood)
                 data["moods"][today_key] = emoji
                 persist_data(data)
-                st.experimental_rerun()
+                safe_rerun()
     if st.button("跳过"):
         st.session_state.mood_skipped = True
-        st.experimental_rerun()
+        safe_rerun()
     st.stop()
 
 
@@ -363,6 +408,20 @@ if "sidebar_collapsed" not in st.session_state:
     st.session_state.sidebar_collapsed = False
 if "last_page" not in st.session_state:
     st.session_state.last_page = st.session_state.page
+
+if "jump_day" in st.query_params:
+    jump_value = st.query_params.get("jump_day")
+    try:
+        jump_day = datetime.strptime(jump_value, "%Y-%m-%d").date()
+        st.session_state.pending_page = "周视图"
+        st.session_state.week_pick = jump_day
+        st.session_state.week_flash_target = jump_day.strftime("%Y-%m-%d")
+        st.session_state.week_flash_step = 0
+        st.session_state.week_flash_on = True
+        st.query_params.clear()
+        safe_rerun()
+    except Exception:
+        st.query_params.clear()
 
 if st.session_state.page != st.session_state.last_page:
     if st.session_state.page == "周视图":
@@ -390,7 +449,7 @@ for i, name in enumerate(PAGES):
             st.session_state.page = name
             if name != "周视图":
                 st.session_state.sidebar_collapsed = True
-            st.experimental_rerun()
+            safe_rerun()
 
 selected_page = st.session_state.page
 
@@ -400,7 +459,7 @@ if not st.session_state.sidebar_collapsed:
         with close_row[1]:
             if st.button("×", key="collapse_sidebar"):
                 st.session_state.sidebar_collapsed = True
-                st.experimental_rerun()
+                safe_rerun()
         st.markdown("### 添加日程")
         with st.form("add_event"):
             t = st.text_input("名称", value="新日程")
@@ -445,10 +504,13 @@ if selected_page == "周视图":
             card_class = "week-day-card flash-on" if is_flash else "week-day-card"
             st.markdown(
                 f"<div class='{card_class}'>"
-                f"<div><strong>{d.strftime('%a')}</strong> {d.strftime('%m/%d')}</div>"
+                f"<div class='week-day-title'>{WEEKDAY_FULL_NAMES[d.weekday()]}</div>"
+                f"<div>{d.strftime('%m/%d')}</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
+            if st.button("查看当天详情", key=f"day_detail_{day_key}"):
+                st.session_state.day_detail_date = day_key
             if not events:
                 st.caption("无日程")
             else:
@@ -485,11 +547,37 @@ if selected_page == "周视图":
         time.sleep(0.25)
         st.session_state.week_flash_on = not flash_on
         st.session_state.week_flash_step = flash_step + 1
-        st.experimental_rerun()
+        safe_rerun()
     elif flash_target:
         st.session_state.week_flash_target = None
         st.session_state.week_flash_step = 0
         st.session_state.week_flash_on = False
+
+    if st.session_state.get("day_detail_date"):
+        detail_date = st.session_state.day_detail_date
+        detail_events = [e for e in data["events"] if e["date"] == detail_date]
+
+        def _render_detail():
+            st.markdown(f"### {detail_date} 全部日程")
+            if not detail_events:
+                st.info("暂无日程")
+                return
+            for ev in detail_events:
+                st.markdown("<div class='detail-card'>", unsafe_allow_html=True)
+                st.markdown(f"**{ev['start']} - {ev['end']}  {ev['title']}**")
+                st.write(f"类型：{ev.get('category', '其他')}")
+                notes = ev.get("notes", "").strip()
+                st.write(f"备注：{notes if notes else '无'}")
+                st.markdown("</div>", unsafe_allow_html=True)
+
+        if hasattr(st, "dialog"):
+            @st.dialog("日程详情")
+            def _detail_dialog():
+                _render_detail()
+            _detail_dialog()
+        else:
+            with st.expander("日程详情", expanded=True):
+                _render_detail()
 
 
 if selected_page == "月视图":
@@ -503,26 +591,32 @@ if selected_page == "月视图":
     start_offset = (first_weekday - 1) % 7
     day_cursor = 1
 
-    for row in range(6):
-        cols = st.columns(7)
-        for col in range(7):
-            slot = row * 7 + col
-            with cols[col]:
-                if slot < start_offset or day_cursor > days_in_month:
-                    st.write(" ")
-                    continue
-                current = m_start.replace(day=day_cursor)
-                mood = data["moods"].get(current.strftime("%Y-%m-%d"), "")
-                label = f"{day_cursor} {mood}" if mood else f"{day_cursor}"
-                clicked = st.button(label, key=f"month_day_{current.strftime('%Y%m%d')}", use_container_width=True)
-                if clicked:
-                    st.session_state.pending_page = "周视图"
-                    st.session_state.week_pick = current
-                    st.session_state.week_flash_target = current.strftime("%Y-%m-%d")
-                    st.session_state.week_flash_step = 0
-                    st.session_state.week_flash_on = True
-                    st.experimental_rerun()
-                day_cursor += 1
+    week_headers = ["一", "二", "三", "四", "五", "六", "日"]
+    header_cols = st.columns(7)
+    for i, h in enumerate(week_headers):
+        with header_cols[i]:
+            st.markdown(f"<div class='month-weekday'>{h}</div>", unsafe_allow_html=True)
+
+    html_cells = ["<div class='month-grid'>"]
+    for slot in range(total_slots):
+        if slot < start_offset or day_cursor > days_in_month:
+            html_cells.append("<div></div>")
+            continue
+        current = m_start.replace(day=day_cursor)
+        date_key = current.strftime("%Y-%m-%d")
+        mood = data["moods"].get(date_key, "")
+        mood_text = MOOD_LABELS.get(mood, "")
+        mood_short = mood_text[:2] if mood_text else ""
+        label = f"{day_cursor} {mood}{mood_short}" if mood else f"{day_cursor}"
+        mood_class = "bad" if mood in BAD_MOOD_EMOJIS else ("good" if mood else "")
+        html_cells.append(
+            f"<a class='month-cell {mood_class}' href='?jump_day={date_key}'>"
+            f"{label}"
+            f"</a>"
+        )
+        day_cursor += 1
+    html_cells.append("</div>")
+    st.markdown("".join(html_cells), unsafe_allow_html=True)
 
 if selected_page == "番茄钟":
     st.markdown("<div class='section-title'>番茄钟</div>", unsafe_allow_html=True)
@@ -565,7 +659,7 @@ if selected_page == "番茄钟":
                     st.session_state.pomodoro_running = True
                     st.session_state.pomodoro_start = time.time()
                     st.session_state.pomodoro_duration = mins * 60
-                    st.experimental_rerun()
+                    safe_rerun()
 
         if st.button("取消"):
             if st.session_state.pomodoro_running:
@@ -580,7 +674,7 @@ if selected_page == "番茄钟":
             st.session_state.pomodoro_running = False
             st.session_state.pomodoro_start = None
             st.session_state.pomodoro_duration = 0
-            st.experimental_rerun()
+            safe_rerun()
 
         if st.session_state.pomodoro_running:
             if remaining <= 0:
@@ -593,10 +687,10 @@ if selected_page == "番茄钟":
                 st.session_state.pomodoro_running = False
                 st.session_state.pomodoro_start = None
                 st.session_state.pomodoro_duration = 0
-                st.experimental_rerun()
+                safe_rerun()
             else:
-                time.sleep(1)
-                st.experimental_rerun()
+                if not maybe_autorefresh(1000, "pomodoro_autorefresh"):
+                    st.caption("计时进行中，点击任意按钮或切换页面可更新倒计时。")
 
 if selected_page == "统计":
     st.markdown("<div class='section-title'>统计</div>", unsafe_allow_html=True)
@@ -681,4 +775,4 @@ if selected_page == "往期回顾":
             if st.button("删除", key=f"del_arc_{item['id']}"):
                 data["archives"] = [a for a in data["archives"] if a["id"] != item["id"]]
                 persist_data(data)
-                st.experimental_rerun()
+                safe_rerun()

@@ -22,6 +22,41 @@ CATEGORY_COLORS = {
     "其他": "#E8E0FF",
 }
 
+MOODS = [
+    "开心 😄", "平静 😌", "感恩 🙏", "充满希望 🌈",
+    "自豪 😎", "期待 🤩", "专注 🔍", "高效 ⚡",
+    "动力十足 🔥", "创造 💡", "学习 📚", "挑战 🧗",
+    "被爱 🥰", "合作愉快 🤝", "收到启发 ✨", "治愈 🌿",
+    "健康 🏃", "庆祝 🎉", "纪念 🎂", "家庭时光 👨‍👩‍👧",
+    "压力大 😰", "无聊 😐",
+    "混乱 😵", "犹豫 🤔", "拖延 🐌", "孤独 🏝️",
+    "想念 🌙", "生气 😠", "失望 😔", "焦虑 😟",
+]
+
+BAD_MOOD_TEXTS = {"压力大", "混乱", "犹豫", "拖延", "孤独", "想念", "生气", "失望", "焦虑"}
+
+
+def _split_mood(entry: str):
+    if " " not in entry:
+        return entry, ""
+    text, emoji = entry.rsplit(" ", 1)
+    return text, emoji
+
+
+MOOD_LABELS = {}
+BAD_MOOD_EMOJIS = set()
+for _entry in MOODS:
+    _text, _emoji = _split_mood(_entry)
+    if _emoji:
+        MOOD_LABELS[_emoji] = _text
+        if _text in BAD_MOOD_TEXTS:
+            BAD_MOOD_EMOJIS.add(_emoji)
+
+MOOD_GOOD_BG = "#E7F7E8"
+MOOD_BAD_BG = "#FBE7E7"
+WEEKDAY_FULL_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+WEEKDAY_FANCY_FONT = ("Segoe Script", 11, "bold")
+
 APP_BG = "#EEF5FF"
 BUTTON_BG = "#D6EBFF"
 BUTTON_BG_ACTIVE = "#C5E2FF"
@@ -235,7 +270,7 @@ class App(tk.Tk):
         self.style.configure(
             "Weekday.TButton",
             padding=(6, 4),
-            font=("Microsoft YaHei", 11),
+            font=WEEKDAY_FANCY_FONT,
             background=self.theme["button_bg"],
             foreground=self.theme["fg"],
             borderwidth=1,
@@ -342,8 +377,10 @@ class App(tk.Tk):
         self.status_bar.pack(side="bottom", fill="x")
         self.status_spacer = ttk.Frame(self.status_bar)
         self.status_spacer.pack(side="left", expand=True, fill="x")
-        self.theme_toggle_btn = ttk.Button(self.status_bar, text="🌙 深色模式", command=self._toggle_theme)
-        self.theme_toggle_btn.pack(side="right", padx=10, pady=6)
+        self.status_actions = ttk.Frame(self.status_bar)
+        self.status_actions.pack(side="right", padx=8)
+        self.theme_toggle_btn = ttk.Button(self.status_actions, text="🌙 深色模式", command=self._toggle_theme)
+        self.theme_toggle_btn.pack(side="right", padx=6, pady=6)
 
         self.after(100, self._show_mood_prompt)
 
@@ -450,9 +487,9 @@ class App(tk.Tk):
             day = self.week_start + timedelta(days=i)
             btn = ttk.Button(
                 header,
-                text=f"{day.strftime('%A')}\n{day.strftime('%m/%d')}",
+                text=f"{WEEKDAY_FULL_NAMES[day.weekday()]}\n{day.strftime('%m/%d')}",
                 style="Weekday.TButton",
-                command=lambda d=day: self._select_day(d),
+                command=lambda d=day: self._open_day_detail_window(d),
             )
             btn.grid(row=0, column=i + 1, sticky="nsew")
 
@@ -482,6 +519,7 @@ class App(tk.Tk):
                 fill=fill,
                 outline="",
             )
+            grid.tag_bind(rect_id, "<Button-1>", lambda _e, d=self.week_start + timedelta(days=i): self._open_day_detail_window(d))
             self.week_col_rects.append(rect_id)
 
         for hour in range(TIME_START, TIME_END + 1):
@@ -932,16 +970,7 @@ class App(tk.Tk):
         grid = ttk.Frame(container)
         grid.pack()
 
-        moods = [
-            "开心 😄", "平静 😌", "感恩 🙏", "充满希望 🌈",
-            "自豪 😎", "期待 🤩", "专注 🔍", "高效 ⚡",
-            "动力十足 🔥", "创造 💡", "学习 📚", "挑战 🧗",
-            "被爱 🥰", "合作愉快 🤝", "收到启发 ✨", "治愈 🌿",
-            "健康 🏃", "庆祝 🎉", "纪念 🎂", "家庭时光 👨‍👩‍👧",
-            "压力大 😰", "无聊 😐",
-            "混乱 😵", "犹豫 🤔", "拖延 🐌", "孤独 🏝️",
-            "想念 🌙", "生气 😠", "失望 😔", "焦虑 😟",
-        ]
+        moods = MOODS
 
         def animate_dismiss():
             # 释放 grab 并向上滑动销毁 overlay
@@ -966,7 +995,7 @@ class App(tk.Tk):
             step()
 
         def select_mood(mood_text: str):
-            emoji = mood_text.split(" ")[-1]
+            _, emoji = _split_mood(mood_text)
             self.storage.set_mood(today_key, emoji)
             self._render_month()
             animate_dismiss()
@@ -1029,16 +1058,24 @@ class App(tk.Tk):
                 continue
 
             current = self.current_month.replace(day=day_cursor)
+            mood = self.storage.data.get("moods", {}).get(current.strftime("%Y-%m-%d"), "")
+            if mood:
+                mood_bg = MOOD_BAD_BG if mood in BAD_MOOD_EMOJIS else MOOD_GOOD_BG
+            else:
+                mood_bg = self.theme["month_date_bg"]
+
             date_chip = tk.Frame(
                 cell,
-                bg=self.theme["month_date_bg"],
+                bg=mood_bg,
                 highlightbackground=self.theme["month_date_border"],
                 highlightthickness=1,
             )
             date_chip.pack(anchor="nw", padx=4, pady=4)
-            mood = self.storage.data.get("moods", {}).get(current.strftime("%Y-%m-%d"), "")
-            label_text = f"{day_cursor} {mood}" if mood else str(day_cursor)
-            label = tk.Label(date_chip, text=label_text, bg=self.theme["month_date_bg"], fg=self.theme["fg"])
+            mood_text = MOOD_LABELS.get(mood, "")
+            mood_short = mood_text[:2] if mood_text else ""
+            label_text = f"{day_cursor} {mood}{mood_short}" if mood else str(day_cursor)
+            label_fg = "#1F3B57" if mood else self.theme["fg"]
+            label = tk.Label(date_chip, text=label_text, bg=mood_bg, fg=label_fg)
             label.pack(padx=4, pady=1)
 
             def _open_day(_event, target=current):
@@ -1444,6 +1481,7 @@ class App(tk.Tk):
         )
         self.style.configure(
             "Weekday.TButton",
+            font=WEEKDAY_FANCY_FONT,
             background=self.theme["button_bg"],
             foreground=self.theme["fg"],
         )
@@ -1561,6 +1599,75 @@ class App(tk.Tk):
         self.tabs.select(self.week_tab)
         self._refresh_week()
         self._flash_day_highlight(d)
+
+    def _open_day_detail_window(self, d: date):
+        self._select_day(d)
+
+        dialog = tk.Toplevel(self)
+        dialog.title(f"{d.strftime('%Y-%m-%d')} 日程详情")
+        dialog.geometry("760x620")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(True, True)
+        dialog.configure(bg=self.theme["app_bg"])
+
+        inner = self._create_scrollable_dialog(dialog)
+
+        header_text = f"{d.strftime('%Y-%m-%d')} 全部日程"
+        ttk.Label(inner, text=header_text, font=("Microsoft YaHei", 14, "bold")).pack(anchor="w", padx=12, pady=(12, 8))
+
+        events = self._events_on_day(d)
+        if not events:
+            ttk.Label(inner, text="暂无日程", foreground=self.theme["fg"]).pack(anchor="w", padx=12, pady=8)
+            return
+
+        for event in events:
+            card = tk.Frame(
+                inner,
+                bg=self.theme["panel_bg"],
+                highlightbackground=self.theme["month_date_border"],
+                highlightthickness=1,
+            )
+            card.pack(fill="x", padx=12, pady=6)
+
+            title = f"{event['start']} - {event['end']}  {event['title']}"
+            tk.Label(
+                card,
+                text=title,
+                bg=self.theme["panel_bg"],
+                fg=self.theme["fg"],
+                font=("Microsoft YaHei", 12, "bold"),
+                anchor="w",
+                justify="left",
+            ).pack(fill="x", padx=10, pady=(8, 4))
+
+            tk.Label(
+                card,
+                text=f"类型：{event['category']}",
+                bg=self.theme["panel_bg"],
+                fg=self.theme["fg"],
+                anchor="w",
+            ).pack(fill="x", padx=10, pady=(0, 4))
+
+            notes = event.get("notes", "").strip()
+            if notes:
+                tk.Label(
+                    card,
+                    text=f"备注：{notes}",
+                    bg=self.theme["panel_bg"],
+                    fg=self.theme["fg"],
+                    anchor="w",
+                    justify="left",
+                    wraplength=700,
+                ).pack(fill="x", padx=10, pady=(0, 8))
+            else:
+                tk.Label(
+                    card,
+                    text="备注：无",
+                    bg=self.theme["panel_bg"],
+                    fg=self.theme["fg"],
+                    anchor="w",
+                ).pack(fill="x", padx=10, pady=(0, 8))
 
     def _events_on_day(self, d: date):
         return sorted(
