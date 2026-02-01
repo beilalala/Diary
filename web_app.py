@@ -265,11 +265,16 @@ body { background-color: #EEF5FF; }
 .focus-text { font-size: 20px; font-weight: 700; color: #1F3B57; text-align: right; }
 .week-day-card { padding: 8px 10px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; margin-bottom: 6px; }
 .week-day-card.flash-on { background: #C9D6F2; border-color: #9CB4E0; }
-.week-day-btn .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; white-space: pre-line; }
+.week-day-btn .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 8px 8px; background: #F7FAFF; color: #1F3B57; font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; white-space: pre-line; line-height: 1.1; min-height: 64px; }
 .week-day-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .week-day-btn.flash-on .stButton > button { background: #C9D6F2; border-color: #9CB4E0; }
 .detail-event-btn .stButton > button { width: 100%; text-align: left; border: 1px solid #E2EAF5; border-radius: 10px; background: #FFFFFF; padding: 8px 10px; }
 .detail-event-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
+.detail-panel { background: #FFFFFF; border-radius: 14px; border: 1px solid #E2EAF5; padding: 14px 16px; margin: 8px 0 16px; }
+.detail-panel h4 { margin: 4px 0 10px; }
+.footer-bar { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 10px; z-index: 999; }
+.footer-btn { display: inline-block; padding: 8px 14px; border-radius: 12px; border: 1px solid #C9DBF2; background: #F7FAFF; color: #1F3B57; text-decoration: none; font-weight: 600; }
+.footer-btn:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .event-card { background: #FFFFFF; border-radius: 10px; padding: 8px 10px; margin: 6px 0; border: 1px solid #E2EAF5; font-size: 14px; }
 .event-time { font-weight: 700; color: #1F3B57; margin-right: 6px; }
 .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
@@ -383,7 +388,7 @@ st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
 try:
     _build_stamp = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y-%m-%d %H:%M")
-    st.caption(f"Web 版本更新于：{_build_stamp}")
+    st.caption(f"版本 2.2 · 更新于：{_build_stamp}")
 except Exception:
     pass
 
@@ -432,6 +437,8 @@ if "event_notes" not in st.session_state:
     st.session_state.event_notes = ""
 if "event_form_bound_id" not in st.session_state:
     st.session_state.event_form_bound_id = None
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
 if "last_page" not in st.session_state:
     st.session_state.last_page = st.session_state.page
 
@@ -449,6 +456,11 @@ if "jump_day" in st.query_params:
     except Exception:
         st.query_params.clear()
 
+if "toggle_theme" in st.query_params:
+    st.session_state.dark_mode = not st.session_state.dark_mode
+    st.query_params.clear()
+    safe_rerun()
+
 if st.session_state.page != st.session_state.last_page:
     if st.session_state.page == "周视图":
         st.session_state.sidebar_collapsed = False
@@ -462,6 +474,23 @@ if st.session_state.sidebar_collapsed:
 <style>
 section[data-testid="stSidebar"] { display: none; }
 section.main { margin-left: 0 !important; }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+if st.session_state.dark_mode:
+    st.markdown(
+        """
+<style>
+body { background-color: #1D2430; color: #E7EDF7; }
+.block-container { background-color: #1D2430; }
+.card, .detail-panel { background: #252D3A; border-color: #3A4A5F; color: #E7EDF7; }
+.week-day-btn .stButton > button { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
+.week-day-btn .stButton > button:hover { background: #37465C; }
+.event-block { color: #1F3B57; }
+.footer-btn { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
+.footer-btn:hover { background: #37465C; }
 </style>
 """,
         unsafe_allow_html=True,
@@ -563,6 +592,33 @@ if selected_page == "周视图":
     week_start = iso_week_start(picked)
     st.markdown(f"**周：{week_start.strftime('%Y/%m/%d')} - {(week_start + timedelta(days=6)).strftime('%Y/%m/%d')}**")
 
+    if st.session_state.get("day_detail_date"):
+        detail_date = st.session_state.day_detail_date
+        detail_events = [e for e in data["events"] if e["date"] == detail_date]
+        st.markdown("<div class='detail-panel'>", unsafe_allow_html=True)
+        st.markdown(f"#### {detail_date} 全部日程")
+        close_cols = st.columns([1, 5])
+        with close_cols[0]:
+            if st.button("关闭", key="close_day_detail"):
+                st.session_state.day_detail_date = None
+                safe_rerun()
+        if not detail_events:
+            st.info("暂无日程")
+        else:
+            for ev in detail_events:
+                st.markdown("<div class='detail-event-btn'>", unsafe_allow_html=True)
+                if st.button(f"{ev['start']} - {ev['end']}  {ev['title']}", key=f"pick_event_{ev['id']}"):
+                    st.session_state.editing_event_id = ev["id"]
+                    st.session_state.sidebar_collapsed = False
+                    _bind_event_form(ev)
+                    safe_rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.write(f"类型：{ev.get('category', '其他')}")
+                notes = ev.get("notes", "").strip()
+                st.write(f"备注：{notes if notes else '无'}")
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
     flash_target = st.session_state.week_flash_target
     flash_on = st.session_state.week_flash_on
     flash_step = st.session_state.week_flash_step
@@ -621,39 +677,6 @@ if selected_page == "周视图":
         st.session_state.week_flash_step = 0
         st.session_state.week_flash_on = False
 
-    if st.session_state.get("day_detail_date"):
-        detail_date = st.session_state.day_detail_date
-        detail_events = [e for e in data["events"] if e["date"] == detail_date]
-
-        def _render_detail():
-            st.markdown(f"### {detail_date} 全部日程")
-            if st.button("关闭", key="close_day_detail"):
-                st.session_state.day_detail_date = None
-                safe_rerun()
-            if not detail_events:
-                st.info("暂无日程")
-                return
-            for ev in detail_events:
-                st.markdown("<div class='detail-event-btn'>", unsafe_allow_html=True)
-                if st.button(f"{ev['start']} - {ev['end']}  {ev['title']}", key=f"pick_event_{ev['id']}"):
-                    st.session_state.editing_event_id = ev["id"]
-                    st.session_state.sidebar_collapsed = False
-                    _bind_event_form(ev)
-                    st.session_state.day_detail_date = None
-                    safe_rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.write(f"类型：{ev.get('category', '其他')}")
-                notes = ev.get("notes", "").strip()
-                st.write(f"备注：{notes if notes else '无'}")
-                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-        if hasattr(st, "dialog"):
-            @st.dialog("日程详情")
-            def _detail_dialog():
-                _render_detail()
-            _detail_dialog()
-        else:
-            st.warning("当前版本不支持弹窗显示，请升级 Streamlit 以查看日程详情。")
 
 
 if selected_page == "月视图":
@@ -693,6 +716,12 @@ if selected_page == "月视图":
         day_cursor += 1
     html_cells.append("</div>")
     st.markdown("".join(html_cells), unsafe_allow_html=True)
+
+footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
+st.markdown(
+    f"<div class='footer-bar'><a class='footer-btn' href='?toggle_theme=1'>{footer_label}</a></div>",
+    unsafe_allow_html=True,
+)
 
 if selected_page == "番茄钟":
     st.markdown("<div class='section-title'>番茄钟</div>", unsafe_allow_html=True)
