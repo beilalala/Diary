@@ -273,6 +273,8 @@ body { background-color: #EEF5FF; }
 .event-block { position: absolute; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; font-size: 12px; color: #1F3B57; overflow: hidden; }
 .event-block-time { font-weight: 700; }
 .week-day-title { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; }
+.week-day-link { display: block; text-decoration: none; color: inherit; }
+.week-day-link:focus, .week-day-link:hover { text-decoration: none; }
 .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .month-cell { display: block; padding: 10px 8px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; text-align: center; color: #1F3B57; text-decoration: none; font-weight: 600; }
 .month-cell.good { background: #E7F7E8; }
@@ -376,6 +378,11 @@ def persist_data(payload: dict):
 
 st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
+try:
+    _build_stamp = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y-%m-%d %H:%M")
+    st.caption(f"Web 版本更新于：{_build_stamp}")
+except Exception:
+    pass
 
 today_key = date.today().strftime("%Y-%m-%d")
 if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped"):
@@ -406,6 +413,22 @@ if "week_flash_target" not in st.session_state:
     st.session_state.week_flash_on = False
 if "sidebar_collapsed" not in st.session_state:
     st.session_state.sidebar_collapsed = False
+if "editing_event_id" not in st.session_state:
+    st.session_state.editing_event_id = None
+if "event_title" not in st.session_state:
+    st.session_state.event_title = "新日程"
+if "event_date" not in st.session_state:
+    st.session_state.event_date = date.today()
+if "event_start" not in st.session_state:
+    st.session_state.event_start = datetime.strptime("09:00", "%H:%M").time()
+if "event_end" not in st.session_state:
+    st.session_state.event_end = datetime.strptime("10:00", "%H:%M").time()
+if "event_category" not in st.session_state:
+    st.session_state.event_category = CATEGORIES[0]
+if "event_notes" not in st.session_state:
+    st.session_state.event_notes = ""
+if "event_form_bound_id" not in st.session_state:
+    st.session_state.event_form_bound_id = None
 if "last_page" not in st.session_state:
     st.session_state.last_page = st.session_state.page
 
@@ -418,6 +441,21 @@ if "jump_day" in st.query_params:
         st.session_state.week_flash_target = jump_day.strftime("%Y-%m-%d")
         st.session_state.week_flash_step = 0
         st.session_state.week_flash_on = True
+        st.query_params.clear()
+        safe_rerun()
+    except Exception:
+        st.query_params.clear()
+
+if "day_detail" in st.query_params:
+    detail_value = st.query_params.get("day_detail")
+    try:
+        detail_day = datetime.strptime(detail_value, "%Y-%m-%d").date()
+        st.session_state.pending_page = "周视图"
+        st.session_state.week_pick = detail_day
+        st.session_state.week_flash_target = detail_day.strftime("%Y-%m-%d")
+        st.session_state.week_flash_step = 0
+        st.session_state.week_flash_on = True
+        st.session_state.day_detail_date = detail_day.strftime("%Y-%m-%d")
         st.query_params.clear()
         safe_rerun()
     except Exception:
@@ -453,6 +491,34 @@ for i, name in enumerate(PAGES):
 
 selected_page = st.session_state.page
 
+def _reset_event_form():
+    st.session_state.event_title = "新日程"
+    st.session_state.event_date = date.today()
+    st.session_state.event_start = datetime.strptime("09:00", "%H:%M").time()
+    st.session_state.event_end = datetime.strptime("10:00", "%H:%M").time()
+    st.session_state.event_category = CATEGORIES[0]
+    st.session_state.event_notes = ""
+    st.session_state.event_form_bound_id = None
+
+
+def _bind_event_form(ev: dict):
+    st.session_state.event_title = ev.get("title", "") or "未命名"
+    st.session_state.event_date = datetime.strptime(ev["date"], "%Y-%m-%d").date()
+    st.session_state.event_start = datetime.strptime(ev["start"], "%H:%M").time()
+    st.session_state.event_end = datetime.strptime(ev["end"], "%H:%M").time()
+    cat = ev.get("category", "其他")
+    st.session_state.event_category = cat if cat in CATEGORIES else "其他"
+    st.session_state.event_notes = ev.get("notes", "")
+    st.session_state.event_form_bound_id = ev.get("id")
+
+
+if st.session_state.editing_event_id:
+    _editing_event = next((e for e in data["events"] if e["id"] == st.session_state.editing_event_id), None)
+    if _editing_event and st.session_state.event_form_bound_id != _editing_event["id"]:
+        _bind_event_form(_editing_event)
+elif st.session_state.event_form_bound_id is not None:
+    _reset_event_form()
+
 if not st.session_state.sidebar_collapsed:
     with st.sidebar:
         close_row = st.columns([8, 1])
@@ -460,18 +526,29 @@ if not st.session_state.sidebar_collapsed:
             if st.button("×", key="collapse_sidebar"):
                 st.session_state.sidebar_collapsed = True
                 safe_rerun()
-        st.markdown("### 添加日程")
+        edit_mode = st.session_state.editing_event_id is not None
+        st.markdown("### 编辑日程" if edit_mode else "### 添加日程")
         with st.form("add_event"):
-            t = st.text_input("名称", value="新日程")
-            d = st.date_input("日期", value=date.today())
-            start = st.time_input("开始时间", value=datetime.strptime("09:00", "%H:%M").time())
-            end = st.time_input("结束时间", value=datetime.strptime("10:00", "%H:%M").time())
-            cat = st.selectbox("类型", CATEGORIES)
-            notes = st.text_area("备注（可选）")
-            submitted = st.form_submit_button("保存")
+            t = st.text_input("名称", key="event_title")
+            d = st.date_input("日期", key="event_date")
+            start = st.time_input("开始时间", key="event_start")
+            end = st.time_input("结束时间", key="event_end")
+            cat = st.selectbox("类型", CATEGORIES, key="event_category")
+            notes = st.text_area("备注（可选）", key="event_notes")
+
+            btn_cols = st.columns(2)
+            with btn_cols[0]:
+                submitted = st.form_submit_button("保存修改" if edit_mode else "保存")
+            with btn_cols[1]:
+                canceled = st.form_submit_button("取消编辑" if edit_mode else "重置")
+
+            if canceled:
+                st.session_state.editing_event_id = None
+                _reset_event_form()
+                safe_rerun()
+
             if submitted:
-                new = {
-                    "id": str(uuid.uuid4()),
+                payload = {
                     "title": t.strip() or "未命名",
                     "date": d.strftime("%Y-%m-%d"),
                     "start": start.strftime("%H:%M"),
@@ -479,9 +556,22 @@ if not st.session_state.sidebar_collapsed:
                     "category": cat,
                     "notes": notes.strip(),
                 }
-                data["events"].append(new)
-                persist_data(data)
-                st.success("已保存")
+                if edit_mode:
+                    for idx, item in enumerate(data["events"]):
+                        if item["id"] == st.session_state.editing_event_id:
+                            payload["id"] = item["id"]
+                            data["events"][idx] = payload
+                            break
+                    persist_data(data)
+                    st.session_state.editing_event_id = None
+                    _reset_event_form()
+                    st.success("已更新")
+                    safe_rerun()
+                else:
+                    payload["id"] = str(uuid.uuid4())
+                    data["events"].append(payload)
+                    persist_data(data)
+                    st.success("已保存")
 
 
 if selected_page == "周视图":
@@ -503,14 +593,14 @@ if selected_page == "周视图":
             is_flash = flash_target == day_key and flash_on
             card_class = "week-day-card flash-on" if is_flash else "week-day-card"
             st.markdown(
+                f"<a class='week-day-link' href='?day_detail={day_key}'>"
                 f"<div class='{card_class}'>"
                 f"<div class='week-day-title'>{WEEKDAY_FULL_NAMES[d.weekday()]}</div>"
                 f"<div>{d.strftime('%m/%d')}</div>"
-                f"</div>",
+                f"</div>"
+                f"</a>",
                 unsafe_allow_html=True,
             )
-            if st.button("查看当天详情", key=f"day_detail_{day_key}"):
-                st.session_state.day_detail_date = day_key
             if not events:
                 st.caption("无日程")
             else:
@@ -559,12 +649,20 @@ if selected_page == "周视图":
 
         def _render_detail():
             st.markdown(f"### {detail_date} 全部日程")
+            if st.button("关闭", key="close_day_detail"):
+                st.session_state.day_detail_date = None
+                safe_rerun()
             if not detail_events:
                 st.info("暂无日程")
                 return
             for ev in detail_events:
                 st.markdown("<div class='detail-card'>", unsafe_allow_html=True)
-                st.markdown(f"**{ev['start']} - {ev['end']}  {ev['title']}**")
+                if st.button(f"{ev['start']} - {ev['end']}  {ev['title']}", key=f"pick_event_{ev['id']}"):
+                    st.session_state.editing_event_id = ev["id"]
+                    st.session_state.sidebar_collapsed = False
+                    _bind_event_form(ev)
+                    st.session_state.day_detail_date = None
+                    safe_rerun()
                 st.write(f"类型：{ev.get('category', '其他')}")
                 notes = ev.get("notes", "").strip()
                 st.write(f"备注：{notes if notes else '无'}")
@@ -576,8 +674,7 @@ if selected_page == "周视图":
                 _render_detail()
             _detail_dialog()
         else:
-            with st.expander("日程详情", expanded=True):
-                _render_detail()
+            st.warning("当前版本不支持弹窗显示，请升级 Streamlit 以查看日程详情。")
 
 
 if selected_page == "月视图":
