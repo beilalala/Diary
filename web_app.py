@@ -42,6 +42,8 @@ MOODS = [
 
 BAD_MOOD_TEXTS = {"压力大", "混乱", "犹豫", "拖延", "孤独", "想念", "生气", "失望", "焦虑"}
 WEEKDAY_FULL_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+WEEKDAY_SHORT_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+WEEKDAY_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 MOOD_GOOD_BG = "#E7F7E8"
 MOOD_BAD_BG = "#FBE7E7"
 
@@ -265,13 +267,14 @@ body { background-color: #EEF5FF; }
 .focus-text { font-size: 20px; font-weight: 700; color: #1F3B57; text-align: right; }
 .week-day-card { padding: 8px 10px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; margin-bottom: 6px; }
 .week-day-card.flash-on { background: #C9D6F2; border-color: #9CB4E0; }
+.week-day-btn, .week-day-btn * { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive !important; }
 .week-day-btn .stButton > button,
 .week-day-btn .stButton button,
-.week-day-btn button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 8px; background: #F7FAFF; color: #1F3B57; font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive !important; font-weight: 700; white-space: pre-line; line-height: 1.1; min-height: 64px; height: 64px; display: flex; flex-direction: column; justify-content: center; font-size: 13px; }
+.week-day-btn button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 8px; background: #F7FAFF; color: #1F3B57; font-weight: 700; white-space: pre; line-height: 1.1; min-height: 64px; height: 64px; display: flex; flex-direction: column; justify-content: center; text-align: center; font-size: 13px; overflow: hidden; }
 .week-day-btn .stButton > button span,
 .week-day-btn .stButton button span,
 .week-day-btn button span,
-.week-day-btn .stButton > button * { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive !important; white-space: pre-line; word-break: keep-all; }
+.week-day-btn .stButton > button * { white-space: pre; word-break: keep-all; }
 .week-day-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .week-day-btn.flash-on .stButton > button { background: #C9D6F2; border-color: #9CB4E0; }
 .detail-event-btn .stButton > button { width: 100%; text-align: left; border: 1px solid #E2EAF5; border-radius: 10px; background: #FFFFFF; padding: 8px 10px; }
@@ -279,8 +282,8 @@ body { background-color: #EEF5FF; }
 .detail-panel { background: #FFFFFF; border-radius: 14px; border: 1px solid #E2EAF5; padding: 14px 16px; margin: 8px 0 16px; }
 .detail-panel h4 { margin: 4px 0 10px; }
 .footer-fixed { position: fixed; right: 16px; bottom: 16px; z-index: 999; }
-.footer-fixed .stButton > button { width: 120px; border: 1px solid #C9DBF2; border-radius: 12px; padding: 8px 14px; background: #F7FAFF; color: #1F3B57; font-weight: 600; }
-.footer-fixed .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
+.footer-fixed a { display: inline-block; width: 88px; text-align: center; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 10px; background: #F7FAFF; color: #1F3B57; font-weight: 600; text-decoration: none; font-size: 12px; }
+.footer-fixed a:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .event-card { background: #FFFFFF; border-radius: 10px; padding: 8px 10px; margin: 6px 0; border: 1px solid #E2EAF5; font-size: 14px; }
 .event-time { font-weight: 700; color: #1F3B57; margin-right: 6px; }
 .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
@@ -462,6 +465,13 @@ if "jump_day" in st.query_params:
     except Exception:
         st.query_params.clear()
 
+if "theme" in st.query_params:
+    theme_value = str(st.query_params.get("theme")).lower()
+    if theme_value in {"dark", "light"}:
+        st.session_state.dark_mode = theme_value == "dark"
+    st.query_params.clear()
+    safe_rerun()
+
 
 if st.session_state.page != st.session_state.last_page:
     if st.session_state.page == "周视图":
@@ -489,6 +499,8 @@ body { background-color: #1D2430; color: #E7EDF7; }
 .block-container { background-color: #1D2430; }
 section[data-testid="stSidebar"] { background-color: #252D3A; }
 .title, .subtitle, .section-title, .stMarkdown, .stCaption,
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4, .stMarkdown h5, .stMarkdown h6,
+.stMarkdown p, .stMarkdown div,
 label, .stTextInput label, .stSelectbox label, .stDateInput label,
 .stTimeInput label, .stTextArea label { color: #E7EDF7 !important; }
 .card, .detail-panel { background: #252D3A; border-color: #3A4A5F; color: #E7EDF7; }
@@ -499,8 +511,8 @@ label, .stTextInput label, .stSelectbox label, .stDateInput label,
 .event-card, .detail-event-btn .stButton > button { background: #202735; border-color: #3A4A5F; color: #E7EDF7; }
 .event-block { color: #1F3B57; }
 input, textarea, select { background-color: #202735 !important; color: #E7EDF7 !important; border-color: #3A4A5F !important; }
-.footer-fixed .stButton > button { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
-.footer-fixed .stButton > button:hover { background: #37465C; }
+.footer-fixed a { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
+.footer-fixed a:hover { background: #37465C; }
 </style>
 """,
         unsafe_allow_html=True,
@@ -642,7 +654,9 @@ if selected_page == "周视图":
             is_flash = flash_target == day_key and flash_on
             container_class = "week-day-btn flash-on" if is_flash else "week-day-btn"
             st.markdown(f"<div class='{container_class}'>", unsafe_allow_html=True)
-            if st.button(f"{WEEKDAY_FULL_NAMES[d.weekday()]}\n{d.strftime('%m/%d')}", key=f"day_card_{day_key}"):
+            label_en = WEEKDAY_SHORT_EN[d.weekday()]
+            label_cn = WEEKDAY_CN[d.weekday()]
+            if st.button(f"{label_en}\n{label_cn} {d.strftime('%m/%d')}", key=f"day_card_{day_key}"):
                 st.session_state.day_detail_date = day_key
             st.markdown("</div>", unsafe_allow_html=True)
             if not events:
@@ -728,11 +742,11 @@ if selected_page == "月视图":
     st.markdown("".join(html_cells), unsafe_allow_html=True)
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
-st.markdown("<div class='footer-fixed'>", unsafe_allow_html=True)
-if st.button(footer_label, key="toggle_dark_mode"):
-    st.session_state.dark_mode = not st.session_state.dark_mode
-    safe_rerun()
-st.markdown("</div>", unsafe_allow_html=True)
+footer_theme = "dark" if not st.session_state.dark_mode else "light"
+st.markdown(
+    f"<div class='footer-fixed'><a href='?theme={footer_theme}'>{footer_label}</a></div>",
+    unsafe_allow_html=True,
+)
 
 if selected_page == "番茄钟":
     st.markdown("<div class='section-title'>番茄钟</div>", unsafe_allow_html=True)
