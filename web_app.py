@@ -265,16 +265,21 @@ body { background-color: #EEF5FF; }
 .focus-text { font-size: 20px; font-weight: 700; color: #1F3B57; text-align: right; }
 .week-day-card { padding: 8px 10px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; margin-bottom: 6px; }
 .week-day-card.flash-on { background: #C9D6F2; border-color: #9CB4E0; }
-.week-day-btn .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 8px 8px; background: #F7FAFF; color: #1F3B57; font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; white-space: pre-line; line-height: 1.1; min-height: 64px; }
+.week-day-btn .stButton > button,
+.week-day-btn .stButton button,
+.week-day-btn button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 8px 8px; background: #F7FAFF; color: #1F3B57; font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive !important; font-weight: 700; white-space: pre-line; line-height: 1.1; min-height: 64px; }
+.week-day-btn .stButton > button span,
+.week-day-btn .stButton button span,
+.week-day-btn button span { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive !important; }
 .week-day-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .week-day-btn.flash-on .stButton > button { background: #C9D6F2; border-color: #9CB4E0; }
 .detail-event-btn .stButton > button { width: 100%; text-align: left; border: 1px solid #E2EAF5; border-radius: 10px; background: #FFFFFF; padding: 8px 10px; }
 .detail-event-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .detail-panel { background: #FFFFFF; border-radius: 14px; border: 1px solid #E2EAF5; padding: 14px 16px; margin: 8px 0 16px; }
 .detail-panel h4 { margin: 4px 0 10px; }
-.footer-bar { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 10px; z-index: 999; }
-.footer-btn { display: inline-block; padding: 8px 14px; border-radius: 12px; border: 1px solid #C9DBF2; background: #F7FAFF; color: #1F3B57; text-decoration: none; font-weight: 600; }
-.footer-btn:hover { border-color: #9CB4E0; background: #EEF5FF; }
+.footer-wrap { margin-top: 12px; }
+.footer-btn .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 12px; padding: 8px 14px; background: #F7FAFF; color: #1F3B57; font-weight: 600; }
+.footer-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .event-card { background: #FFFFFF; border-radius: 10px; padding: 8px 10px; margin: 6px 0; border: 1px solid #E2EAF5; font-size: 14px; }
 .event-time { font-weight: 700; color: #1F3B57; margin-right: 6px; }
 .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
@@ -456,10 +461,6 @@ if "jump_day" in st.query_params:
     except Exception:
         st.query_params.clear()
 
-if "toggle_theme" in st.query_params:
-    st.session_state.dark_mode = not st.session_state.dark_mode
-    st.query_params.clear()
-    safe_rerun()
 
 if st.session_state.page != st.session_state.last_page:
     if st.session_state.page == "周视图":
@@ -485,12 +486,17 @@ if st.session_state.dark_mode:
 <style>
 body { background-color: #1D2430; color: #E7EDF7; }
 .block-container { background-color: #1D2430; }
+section[data-testid="stSidebar"] { background-color: #252D3A; }
 .card, .detail-panel { background: #252D3A; border-color: #3A4A5F; color: #E7EDF7; }
 .week-day-btn .stButton > button { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
 .week-day-btn .stButton > button:hover { background: #37465C; }
+.month-cell { background: #2A3445; border-color: #3A4A5F; color: #E7EDF7; }
+.month-weekday { color: #9FB3C8; }
+.event-card, .detail-event-btn .stButton > button { background: #202735; border-color: #3A4A5F; color: #E7EDF7; }
 .event-block { color: #1F3B57; }
-.footer-btn { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
-.footer-btn:hover { background: #37465C; }
+input, textarea, select { background-color: #202735 !important; color: #E7EDF7 !important; border-color: #3A4A5F !important; }
+.footer-btn .stButton > button { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
+.footer-btn .stButton > button:hover { background: #37465C; }
 </style>
 """,
         unsafe_allow_html=True,
@@ -718,10 +724,14 @@ if selected_page == "月视图":
     st.markdown("".join(html_cells), unsafe_allow_html=True)
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
-st.markdown(
-    f"<div class='footer-bar'><a class='footer-btn' href='?toggle_theme=1'>{footer_label}</a></div>",
-    unsafe_allow_html=True,
-)
+st.markdown("<div class='footer-wrap'></div>", unsafe_allow_html=True)
+footer_cols = st.columns([6, 1])
+with footer_cols[1]:
+    st.markdown("<div class='footer-btn'>", unsafe_allow_html=True)
+    if st.button(footer_label, key="toggle_dark_mode"):
+        st.session_state.dark_mode = not st.session_state.dark_mode
+        safe_rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 if selected_page == "番茄钟":
     st.markdown("<div class='section-title'>番茄钟</div>", unsafe_allow_html=True)
