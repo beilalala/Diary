@@ -29,7 +29,44 @@ CATEGORY_COLORS = {
     "其他": "#E8E0FF",
 }
 
+WEEKDAY_SHORT_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+WEEKDAY_CN = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+
 MOODS = [
+    "开心 😄", "平静 😌", "感恩 🙏", "充满希望 🌈",
+    "自豪 😎", "期待 🤩", "专注 🔍", "高效 ⚡",
+    "动力十足 🔥", "创造 💡", "学习 📚", "挑战 🧗",
+    "被爱 🥰", "合作愉快 🤝", "收到启发 ✨", "治愈 🌿",
+    "健康 🏃", "庆祝 🎉", "纪念 🎂", "家庭时光 👨‍👩‍👧",
+    "压力大 😰", "无聊 😐",
+    "混乱 😵", "犹豫 🤔", "拖延 🐌", "孤独 🏝️",
+    "想念 🌙", "生气 😠", "失望 😔", "焦虑 😟",
+]
+
+BAD_MOOD_TEXTS = {"压力大", "混乱", "犹豫", "拖延", "孤独", "想念", "生气", "失望", "焦虑"}
+
+
+def split_mood(entry: str):
+    if " " not in entry:
+        return entry, ""
+    text, emoji = entry.rsplit(" ", 1)
+    return text, emoji
+
+
+MOOD_LABELS = {}
+BAD_MOOD_EMOJIS = set()
+for _entry in MOODS:
+    _text, _emoji = split_mood(_entry)
+    if _emoji:
+        MOOD_LABELS[_emoji] = _text
+        if _text in BAD_MOOD_TEXTS:
+            BAD_MOOD_EMOJIS.add(_emoji)
+
+MOOD_GOOD_BG = "#E7F7E8"
+MOOD_BAD_BG = "#FBE7E7"
+
+
+def ensure_data_file(file_path: str):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     if not os.path.exists(file_path):
         with open(file_path, "w", encoding="utf-8") as f:
@@ -113,49 +150,6 @@ def db_load_user_data(user_id: str):
     client = get_supabase_client()
     if not client:
         return DEFAULT_DATA.copy()
-    res = client.table("user_data").select("data").eq("user_id", user_id).limit(1).execute()
-    if res.data:
-        data = res.data[0].get("data") or {}
-    else:
-        client.table("user_data").upsert({"user_id": user_id, "data": DEFAULT_DATA}).execute()
-        data = DEFAULT_DATA.copy()
-    data.setdefault("events", [])
-    data.setdefault("archives", [])
-    data.setdefault("moods", {})
-    data.setdefault("pomodoro_records", [])
-    data.setdefault("word_books", {})
-    return data
-
-
-def db_save_user_data(user_id: str, data: dict):
-    client = get_supabase_client()
-    if not client:
-        return
-    client.table("user_data").upsert({"user_id": user_id, "data": data}).execute()
-
-    st.markdown("#### 往期回顾")
-    with st.form("add_archive"):
-        a_date = st.date_input("日期", value=date.today(), key="archive_date")
-        a_text = st.text_area("说说你的想法")
-        a_cat = st.selectbox("类型", CATEGORIES, key="archive_cat")
-        submitted = st.form_submit_button("保存")
-        if submitted:
-            data["archives"].append({
-                "id": str(uuid.uuid4()),
-                "date": a_date.strftime("%Y-%m-%d"),
-                "category": a_cat,
-                "text": a_text.strip(),
-            })
-            persist_data(data)
-            st.success("已保存")
-
-    for item in sorted(data.get("archives", []), key=lambda x: x["date"], reverse=True):
-        with st.expander(f"{item['date']} · {item.get('category', '-')}"):
-            st.write(item.get("text", ""))
-            if st.button("删除", key=f"del_arc_{item['id']}"):
-                data["archives"] = [a for a in data["archives"] if a["id"] != item["id"]]
-                persist_data(data)
-                safe_rerun()
     res = client.table("user_data").select("data").eq("user_id", user_id).limit(1).execute()
     if res.data:
         data = res.data[0].get("data") or {}
