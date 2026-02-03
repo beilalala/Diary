@@ -67,99 +67,88 @@ for _entry in MOODS:
 
 def ensure_data_file(file_path: str):
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    stat_cols = st.columns([1, 3])
-    with stat_cols[0]:
-        st.markdown("#### 选择周")
-        week_pick = st.date_input("选择周中的任意日期", value=date.today(), key="stats_week_pick")
-        week_start = iso_week_start(week_pick)
-        week_end = week_start + timedelta(days=6)
-        st.caption(f"{week_start.strftime('%Y/%m/%d')} - {week_end.strftime('%Y/%m/%d')}")
+    if not os.path.exists(file_path):
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(DEFAULT_DATA, f, ensure_ascii=False, indent=2)
 
-    totals = {c: 0 for c in CATEGORIES}
-    for ev in data["events"]:
-        try:
-            ev_date = datetime.strptime(ev["date"], "%Y-%m-%d").date()
-            if ev_date < week_start or ev_date > week_end:
-                continue
-            start_dt = datetime.strptime(ev["start"], "%H:%M")
-            end_dt = datetime.strptime(ev["end"], "%H:%M")
-            minutes = int((end_dt - start_dt).total_seconds() / 60)
-            if minutes < 0:
-                minutes += 24 * 60
-            totals[ev.get("category", "其他")] += minutes
-        except Exception:
-            continue
 
-    with stat_cols[1]:
-        fig_col1, fig_col2 = st.columns(2)
-        with fig_col1:
-            bar_fig = go.Figure(
-                data=[
-                    go.Bar(
-                        x=list(totals.keys()),
-                        y=list(totals.values()),
-                        marker_color=[CATEGORY_COLORS[c] for c in totals.keys()],
-                    )
-                ]
-            )
-            bar_fig.update_layout(
-                title="本周分类时长",
-                yaxis_title="分钟",
-                height=300,
-                margin=dict(l=40, r=20, t=50, b=30),
-                font=dict(family="Microsoft YaHei, SimHei, Arial", size=13),
-            )
-            st.plotly_chart(bar_fig, use_container_width=True)
+def load_data(file_path: str):
+    ensure_data_file(file_path)
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data.setdefault("events", [])
+    data.setdefault("archives", [])
+    data.setdefault("moods", {})
+    data.setdefault("pomodoro_records", [])
+    data.setdefault("word_books", {})
+    return data
 
-        with fig_col2:
-            values = [v for v in totals.values() if v > 0]
-            labels = [k for k, v in totals.items() if v > 0]
-            if values:
-                pie_fig = go.Figure(
-                    data=[
-                        go.Pie(
-                            labels=labels,
-                            values=values,
-                            textinfo="percent",
-                            insidetextorientation="radial",
-                            marker=dict(colors=[CATEGORY_COLORS[k] for k in labels]),
-                        )
-                    ]
-                )
-            else:
-                pie_fig = go.Figure()
-                pie_fig.add_annotation(text="暂无数据", x=0.5, y=0.5, showarrow=False)
-            pie_fig.update_layout(
-                title="分类占比",
-                height=300,
-                margin=dict(l=20, r=20, t=50, b=30),
-                font=dict(family="Microsoft YaHei, SimHei, Arial", size=13),
-            )
-            st.plotly_chart(pie_fig, use_container_width=True)
 
-    st.markdown("#### 往期回顾")
-    with st.form("add_archive"):
-        a_date = st.date_input("日期", value=date.today(), key="archive_date")
-        a_text = st.text_area("说说你的想法")
-        a_cat = st.selectbox("类型", CATEGORIES, key="archive_cat")
-        submitted = st.form_submit_button("保存")
-        if submitted:
-            data["archives"].append({
-                "id": str(uuid.uuid4()),
-                "date": a_date.strftime("%Y-%m-%d"),
-                "category": a_cat,
-                "text": a_text.strip(),
-            })
-            persist_data(data)
-            st.success("已保存")
+def save_data(data, file_path: str):
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-    for item in sorted(data.get("archives", []), key=lambda x: x["date"], reverse=True):
-        with st.expander(f"{item['date']} · {item.get('category', '-')}"):
-            st.write(item.get("text", ""))
-            if st.button("删除", key=f"del_arc_{item['id']}"):
-                data["archives"] = [a for a in data["archives"] if a["id"] != item["id"]]
-                persist_data(data)
-                safe_rerun()
+
+def load_users():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+    with open(USERS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_users(users: dict):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+
+def hash_password(password: str, salt: str) -> str:
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return digest.hex()
+
+
+def verify_password(password: str, salt: str, stored_hash: str) -> bool:
+    return hash_password(password, salt) == stored_hash
+
+
+def get_supabase_client() -> Client | None:
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_KEY")
+    if not url or not key:
+        return None
+    return create_client(url, key)
+
+
+def get_storage_mode() -> str:
+    return "supabase" if get_supabase_client() else "local"
+
+
+def db_get_user(username: str):
+    client = get_supabase_client()
+    if not client:
+        return None
+    res = client.table("user_accounts").select("id, username, salt, hash").eq("username", username).limit(1).execute()
+    return res.data[0] if res.data else None
+
+
+def db_create_user(username: str, password: str):
+    client = get_supabase_client()
+    if not client:
+        return None
+    salt = uuid.uuid4().hex
+    hashed = hash_password(password, salt)
+    user_res = client.table("user_accounts").insert({"username": username, "salt": salt, "hash": hashed}).execute()
+    user = user_res.data[0] if user_res.data else None
+    if user:
+        client.table("user_data").upsert({"user_id": user["id"], "data": DEFAULT_DATA}).execute()
+    return user
+
+
+def db_load_user_data(user_id: str):
+    client = get_supabase_client()
+    if not client:
+        return DEFAULT_DATA.copy()
     res = client.table("user_data").select("data").eq("user_id", user_id).limit(1).execute()
     if res.data:
         data = res.data[0].get("data") or {}
