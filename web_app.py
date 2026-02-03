@@ -464,6 +464,8 @@ if "word_test_feedback" not in st.session_state:
     st.session_state.word_test_feedback = ""
 if "word_test_show_answer" not in st.session_state:
     st.session_state.word_test_show_answer = False
+if "word_temp_feedback" not in st.session_state:
+    st.session_state.word_temp_feedback = ""
 if "last_page" not in st.session_state:
     st.session_state.last_page = st.session_state.page
 
@@ -565,6 +567,65 @@ def _bind_event_form(ev: dict):
     st.session_state.event_category = cat if cat in CATEGORIES else "其他"
     st.session_state.event_notes = ev.get("notes", "")
     st.session_state.event_form_bound_id = ev.get("id")
+
+
+def _add_word_to_temp():
+    word = st.session_state.get("word_input", "").strip()
+    meaning = st.session_state.get("meaning_input", "").strip()
+    if word and meaning:
+        st.session_state.word_temp_list.append({"word": word, "meaning": meaning})
+        st.session_state.word_input = ""
+        st.session_state.meaning_input = ""
+    else:
+        st.session_state.word_temp_feedback = "请填写单词与释义"
+
+
+def _save_temp_to_book(data_ref: dict):
+    if not st.session_state.word_temp_list:
+        st.session_state.word_temp_feedback = "今日临时列表为空"
+        return
+    today_key = date.today().strftime("%Y-%m-%d")
+    data_ref.setdefault("word_books", {})
+    data_ref["word_books"].setdefault(today_key, [])
+    data_ref["word_books"][today_key].extend(st.session_state.word_temp_list)
+    persist_data(data_ref)
+    st.session_state.word_temp_list = []
+    st.session_state.word_temp_feedback = "已保存至词库"
+
+
+def _submit_test_answer():
+    queue = st.session_state.word_test_queue
+    idx = st.session_state.word_test_index
+    if idx >= len(queue):
+        return
+    current = queue[idx]
+    expected = current["meaning"].strip().lower()
+    got = st.session_state.get("test_answer", "").strip().lower()
+    if got and got == expected:
+        st.session_state.word_test_feedback = "正确！"
+        st.session_state.word_test_index += 1
+        st.session_state.test_answer = ""
+        st.session_state.word_test_show_answer = False
+    else:
+        st.session_state.word_test_feedback = f"正确答案是：{current['meaning']}"
+        st.session_state.word_test_show_answer = True
+
+
+def _next_test_word():
+    st.session_state.word_test_index += 1
+    st.session_state.word_test_feedback = ""
+    st.session_state.word_test_show_answer = False
+    st.session_state.test_answer = ""
+
+
+def _stop_test():
+    st.session_state.word_test_active = False
+    st.session_state.word_test_queue = []
+    st.session_state.word_test_index = 0
+    st.session_state.word_test_date = ""
+    st.session_state.word_test_feedback = ""
+    st.session_state.word_test_show_answer = False
+    st.session_state.test_answer = ""
 
 
 if st.session_state.editing_event_id:
@@ -771,31 +832,15 @@ if selected_page == "单词学习":
 
         add_cols = st.columns([1, 1, 2])
         with add_cols[0]:
-            if st.button("添加", key="add_word"):
-                if word_input.strip() and meaning_input.strip():
-                    st.session_state.word_temp_list.append(
-                        {"word": word_input.strip(), "meaning": meaning_input.strip()}
-                    )
-                    st.session_state.word_input = ""
-                    st.session_state.meaning_input = ""
-                    safe_rerun()
-                else:
-                    st.warning("请填写单词与释义")
+            st.button("添加", key="add_word", on_click=_add_word_to_temp)
 
         with add_cols[1]:
-            if st.button("保存至词库", key="save_word_book"):
-                if not st.session_state.word_temp_list:
-                    st.info("今日临时列表为空")
-                else:
-                    today_key = date.today().strftime("%Y-%m-%d")
-                    data.setdefault("word_books", {})
-                    data["word_books"].setdefault(today_key, [])
-                    data["word_books"][today_key].extend(st.session_state.word_temp_list)
-                    persist_data(data)
-                    st.session_state.word_temp_list = []
-                    st.success("已保存至词库")
+            st.button("保存至词库", key="save_word_book", on_click=_save_temp_to_book, args=(data,))
 
         st.caption(f"今日已添加：{len(st.session_state.word_temp_list)} 个单词")
+        if st.session_state.word_temp_feedback:
+            st.info(st.session_state.word_temp_feedback)
+            st.session_state.word_temp_feedback = ""
         if st.session_state.word_temp_list:
             for item in st.session_state.word_temp_list:
                 st.write(f"• {item['word']} - {item['meaning']}")
@@ -872,40 +917,17 @@ if selected_page == "单词学习":
             else:
                 current = queue[idx]
                 st.markdown("<div style='text-align:center; font-size:34px; font-weight:700;'>" + current["word"] + "</div>", unsafe_allow_html=True)
-                answer = st.text_input("请输入释义", key="test_answer")
+                st.text_input("请输入释义", key="test_answer")
                 if st.session_state.word_test_feedback:
                     st.info(st.session_state.word_test_feedback)
 
                 action_cols = st.columns(2)
                 with action_cols[0]:
-                    if st.button("提交", key="submit_test"):
-                        expected = current["meaning"].strip().lower()
-                        got = answer.strip().lower()
-                        if got == expected and got:
-                            st.session_state.word_test_feedback = "正确！"
-                            st.session_state.word_test_index += 1
-                            st.session_state.test_answer = ""
-                            safe_rerun()
-                        else:
-                            st.session_state.word_test_feedback = f"正确答案是：{current['meaning']}"
-                            st.session_state.word_test_show_answer = True
-                            safe_rerun()
+                    st.button("提交", key="submit_test", on_click=_submit_test_answer)
                 with action_cols[1]:
                     if st.session_state.word_test_show_answer:
-                        if st.button("下一个", key="next_test"):
-                            st.session_state.word_test_index += 1
-                            st.session_state.word_test_feedback = ""
-                            st.session_state.word_test_show_answer = False
-                            st.session_state.test_answer = ""
-                            safe_rerun()
-                    if st.button("结束背诵", key="stop_test"):
-                        st.session_state.word_test_active = False
-                        st.session_state.word_test_queue = []
-                        st.session_state.word_test_index = 0
-                        st.session_state.word_test_date = ""
-                        st.session_state.word_test_feedback = ""
-                        st.session_state.word_test_show_answer = False
-                        safe_rerun()
+                        st.button("下一个", key="next_test", on_click=_next_test_word)
+                    st.button("结束背诵", key="stop_test", on_click=_stop_test)
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
 footer_theme = "dark" if not st.session_state.dark_mode else "light"
