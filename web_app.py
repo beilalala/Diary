@@ -18,7 +18,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 USER_DATA_DIR = os.path.join(DATA_DIR, "users")
 
-DEFAULT_DATA = {"events": [], "archives": [], "moods": {}, "pomodoro_records": []}
+DEFAULT_DATA = {"events": [], "archives": [], "moods": {}, "pomodoro_records": [], "word_books": {}}
 
 CATEGORIES = ["生活", "学习", "班团事务", "运动", "其他"]
 CATEGORY_COLORS = {
@@ -80,6 +80,7 @@ def load_data(file_path: str):
     data.setdefault("archives", [])
     data.setdefault("moods", {})
     data.setdefault("pomodoro_records", [])
+    data.setdefault("word_books", {})
     return data
 
 
@@ -158,6 +159,7 @@ def db_load_user_data(user_id: str):
     data.setdefault("archives", [])
     data.setdefault("moods", {})
     data.setdefault("pomodoro_records", [])
+    data.setdefault("word_books", {})
     return data
 
 
@@ -397,7 +399,7 @@ st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
 st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
 try:
     _build_stamp = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y-%m-%d %H:%M")
-    st.caption(f"版本 2.2 · 更新于：{_build_stamp}")
+    st.caption(f"版本 3.0 · 更新于：{_build_stamp}")
 except Exception:
     pass
 
@@ -418,7 +420,7 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
     st.stop()
 
 
-PAGES = ["周视图", "月视图", "番茄钟", "统计", "往期回顾"]
+PAGES = ["周视图", "月视图", "番茄钟", "统计", "往期回顾", "单词学习"]
 if "page" not in st.session_state:
     st.session_state.page = "周视图"
 if "pending_page" in st.session_state:
@@ -448,6 +450,20 @@ if "event_form_bound_id" not in st.session_state:
     st.session_state.event_form_bound_id = None
 if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = False
+if "word_temp_list" not in st.session_state:
+    st.session_state.word_temp_list = []
+if "word_test_active" not in st.session_state:
+    st.session_state.word_test_active = False
+if "word_test_queue" not in st.session_state:
+    st.session_state.word_test_queue = []
+if "word_test_index" not in st.session_state:
+    st.session_state.word_test_index = 0
+if "word_test_date" not in st.session_state:
+    st.session_state.word_test_date = ""
+if "word_test_feedback" not in st.session_state:
+    st.session_state.word_test_feedback = ""
+if "word_test_show_answer" not in st.session_state:
+    st.session_state.word_test_show_answer = False
 if "last_page" not in st.session_state:
     st.session_state.last_page = st.session_state.page
 
@@ -740,6 +756,156 @@ if selected_page == "月视图":
         day_cursor += 1
     html_cells.append("</div>")
     st.markdown("".join(html_cells), unsafe_allow_html=True)
+
+if selected_page == "单词学习":
+    st.markdown("<div class='section-title'>单词学习</div>", unsafe_allow_html=True)
+    left_col, mid_col, right_col = st.columns([1.1, 1.6, 1.1])
+
+    with mid_col:
+        st.markdown("#### 今日任务")
+        input_cols = st.columns(2)
+        with input_cols[0]:
+            word_input = st.text_input("单词", key="word_input")
+        with input_cols[1]:
+            meaning_input = st.text_input("释义", key="meaning_input")
+
+        add_cols = st.columns([1, 1, 2])
+        with add_cols[0]:
+            if st.button("添加", key="add_word"):
+                if word_input.strip() and meaning_input.strip():
+                    st.session_state.word_temp_list.append(
+                        {"word": word_input.strip(), "meaning": meaning_input.strip()}
+                    )
+                    st.session_state.word_input = ""
+                    st.session_state.meaning_input = ""
+                    safe_rerun()
+                else:
+                    st.warning("请填写单词与释义")
+
+        with add_cols[1]:
+            if st.button("保存至词库", key="save_word_book"):
+                if not st.session_state.word_temp_list:
+                    st.info("今日临时列表为空")
+                else:
+                    today_key = date.today().strftime("%Y-%m-%d")
+                    data.setdefault("word_books", {})
+                    data["word_books"].setdefault(today_key, [])
+                    data["word_books"][today_key].extend(st.session_state.word_temp_list)
+                    persist_data(data)
+                    st.session_state.word_temp_list = []
+                    st.success("已保存至词库")
+
+        st.caption(f"今日已添加：{len(st.session_state.word_temp_list)} 个单词")
+        if st.session_state.word_temp_list:
+            for item in st.session_state.word_temp_list:
+                st.write(f"• {item['word']} - {item['meaning']}")
+
+    with left_col:
+        st.markdown("#### 我的词库")
+        book_dates = sorted(data.get("word_books", {}).keys(), reverse=True)
+        selected_date = st.selectbox("选择日期", book_dates, key="word_book_date") if book_dates else None
+
+        if selected_date:
+            words = data["word_books"].get(selected_date, [])
+            st.caption(f"{selected_date} 共 {len(words)} 个单词")
+            for item in words:
+                st.write(f"• {item['word']} - {item['meaning']}")
+
+            word_options = [f"{w['word']} - {w['meaning']}" for w in words]
+            pick_word = st.selectbox("选择要删除的单词", word_options, key="delete_word_pick") if word_options else None
+            delete_cols = st.columns(2)
+            with delete_cols[0]:
+                if st.button("删除此单词", key="delete_one_word") and pick_word:
+                    keep = [
+                        w for w in words
+                        if f"{w['word']} - {w['meaning']}" != pick_word
+                    ]
+                    data["word_books"][selected_date] = keep
+                    persist_data(data)
+                    st.success("已删除")
+                    safe_rerun()
+            with delete_cols[1]:
+                if st.button("删除此日期全部", key="delete_date_words"):
+                    data["word_books"].pop(selected_date, None)
+                    persist_data(data)
+                    st.success("已删除全部")
+                    safe_rerun()
+        else:
+            st.info("暂无词库记录")
+
+    with right_col:
+        st.markdown("#### 开始背诵")
+        test_dates = sorted(data.get("word_books", {}).keys(), reverse=True)
+        test_date = st.selectbox("选择词库日期", test_dates, key="test_date") if test_dates else None
+
+        if not st.session_state.word_test_active:
+            if st.button("开始背诵", key="start_test"):
+                if not test_date:
+                    st.info("请先选择日期")
+                else:
+                    queue = data["word_books"].get(test_date, [])
+                    if not queue:
+                        st.info("该日期没有单词")
+                    else:
+                        st.session_state.word_test_active = True
+                        st.session_state.word_test_queue = queue
+                        st.session_state.word_test_index = 0
+                        st.session_state.word_test_date = test_date
+                        st.session_state.word_test_feedback = ""
+                        st.session_state.word_test_show_answer = False
+                        safe_rerun()
+        else:
+            queue = st.session_state.word_test_queue
+            idx = st.session_state.word_test_index
+            test_date = st.session_state.word_test_date
+
+            if idx >= len(queue):
+                st.success(f"恭喜你！已完成【{test_date}】所有单词的背诵！")
+                if st.button("结束背诵", key="finish_test"):
+                    st.session_state.word_test_active = False
+                    st.session_state.word_test_queue = []
+                    st.session_state.word_test_index = 0
+                    st.session_state.word_test_date = ""
+                    st.session_state.word_test_feedback = ""
+                    st.session_state.word_test_show_answer = False
+                    safe_rerun()
+            else:
+                current = queue[idx]
+                st.markdown("<div style='text-align:center; font-size:34px; font-weight:700;'>" + current["word"] + "</div>", unsafe_allow_html=True)
+                answer = st.text_input("请输入释义", key="test_answer")
+                if st.session_state.word_test_feedback:
+                    st.info(st.session_state.word_test_feedback)
+
+                action_cols = st.columns(2)
+                with action_cols[0]:
+                    if st.button("提交", key="submit_test"):
+                        expected = current["meaning"].strip().lower()
+                        got = answer.strip().lower()
+                        if got == expected and got:
+                            st.session_state.word_test_feedback = "正确！"
+                            st.session_state.word_test_index += 1
+                            st.session_state.test_answer = ""
+                            safe_rerun()
+                        else:
+                            st.session_state.word_test_feedback = f"正确答案是：{current['meaning']}"
+                            st.session_state.word_test_show_answer = True
+                            safe_rerun()
+                with action_cols[1]:
+                    if st.session_state.word_test_show_answer:
+                        if st.button("下一个", key="next_test"):
+                            st.session_state.word_test_index += 1
+                            st.session_state.word_test_feedback = ""
+                            st.session_state.word_test_show_answer = False
+                            st.session_state.test_answer = ""
+                            safe_rerun()
+                    if st.button("结束背诵", key="stop_test"):
+                        st.session_state.word_test_active = False
+                        st.session_state.word_test_queue = []
+                        st.session_state.word_test_index = 0
+                        st.session_state.word_test_date = ""
+                        st.session_state.word_test_feedback = ""
+                        st.session_state.word_test_show_answer = False
+                        safe_rerun()
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
 footer_theme = "dark" if not st.session_state.dark_mode else "light"
