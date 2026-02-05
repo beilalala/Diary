@@ -694,23 +694,22 @@ if not st.session_state.sidebar_collapsed:
 if st.session_state.delete_target_id:
     target = next((e for e in data["events"] if e["id"] == st.session_state.delete_target_id), None)
     if target:
-        with st.dialog("删除日程"):
-            st.write("是否删除该日程？")
-            st.caption(f"{target.get('start', '')}-{target.get('end', '')} {target.get('title', '')}")
-            confirm_cols = st.columns(2)
-            with confirm_cols[0]:
-                if st.button("确认删除", key="confirm_delete"):
-                    data["events"] = [e for e in data["events"] if e["id"] != target["id"]]
-                    persist_data(data)
-                    if st.session_state.editing_event_id == target["id"]:
-                        st.session_state.editing_event_id = None
-                        _reset_event_form()
-                    st.session_state.delete_target_id = None
-                    safe_rerun()
-            with confirm_cols[1]:
-                if st.button("取消", key="cancel_delete"):
-                    st.session_state.delete_target_id = None
-                    safe_rerun()
+        st.warning("是否删除该日程？")
+        st.caption(f"{target.get('start', '')}-{target.get('end', '')} {target.get('title', '')}")
+        confirm_cols = st.columns(2)
+        with confirm_cols[0]:
+            if st.button("确认删除", key="confirm_delete"):
+                data["events"] = [e for e in data["events"] if e["id"] != target["id"]]
+                persist_data(data)
+                if st.session_state.editing_event_id == target["id"]:
+                    st.session_state.editing_event_id = None
+                    _reset_event_form()
+                st.session_state.delete_target_id = None
+                safe_rerun()
+        with confirm_cols[1]:
+            if st.button("取消", key="cancel_delete"):
+                st.session_state.delete_target_id = None
+                safe_rerun()
     else:
         st.session_state.delete_target_id = None
 
