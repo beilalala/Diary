@@ -770,6 +770,14 @@ if selected_page == "周视图":
             if not events:
                 st.caption("无日程")
             else:
+                for ev in sorted(events, key=lambda x: x["start"]):
+                    action_cols = st.columns([8, 1])
+                    with action_cols[0]:
+                        st.caption(f"{ev['start']}-{ev['end']}  {ev['title']}")
+                    with action_cols[1]:
+                        if st.button("🗑", key=f"delete_inline_{ev['id']}"):
+                            st.session_state.delete_target_id = ev["id"]
+                            safe_rerun()
                 layouts = layout_day_events(events)
                 html_blocks = ["<div class='day-timeline'>"]
                 range_start = TIME_START * 60
