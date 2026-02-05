@@ -294,6 +294,8 @@ body { background-color: #EEF5FF; }
 .day-timeline { position: relative; height: 640px; border: 1px solid #E2EAF5; border-radius: 12px; background: #FFFFFF; background-image: repeating-linear-gradient(to bottom, #EEF2F7 0, #EEF2F7 1px, transparent 1px, transparent 40px); }
 .event-block { position: absolute; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; font-size: 12px; color: #1F3B57; overflow: hidden; }
 .event-block-time { font-weight: 700; }
+.event-delete { position: absolute; top: 4px; right: 6px; font-size: 12px; color: #6B7C93; text-decoration: none; }
+.event-delete:hover { color: #1F3B57; }
 .week-day-title { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; }
 .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .month-cell { display: block; padding: 10px 8px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; text-align: center; color: #1F3B57; text-decoration: none; font-weight: 600; }
@@ -451,6 +453,8 @@ if "event_notes" not in st.session_state:
     st.session_state.event_notes = ""
 if "event_form_bound_id" not in st.session_state:
     st.session_state.event_form_bound_id = None
+if "delete_target_id" not in st.session_state:
+    st.session_state.delete_target_id = None
 if "dark_mode" not in st.session_state:
     st.session_state.dark_mode = False
 if "word_temp_list" not in st.session_state:
@@ -490,6 +494,11 @@ if "theme" in st.query_params:
     theme_value = str(st.query_params.get("theme")).lower()
     if theme_value in {"dark", "light"}:
         st.session_state.dark_mode = theme_value == "dark"
+    st.query_params.clear()
+    safe_rerun()
+
+if "delete_event" in st.query_params:
+    st.session_state.delete_target_id = str(st.query_params.get("delete_event"))
     st.query_params.clear()
     safe_rerun()
 
@@ -687,6 +696,27 @@ if not st.session_state.sidebar_collapsed:
                     persist_data(data)
                     st.success("已保存")
 
+        if st.session_state.delete_target_id:
+            target = next((e for e in data["events"] if e["id"] == st.session_state.delete_target_id), None)
+            if target:
+                st.warning("是否删除该日程？")
+                st.caption(f"{target.get('start', '')}-{target.get('end', '')} {target.get('title', '')}")
+                delete_cols = st.columns(2)
+                with delete_cols[0]:
+                    if st.button("确认删除", key="confirm_delete"):
+                        data["events"] = [e for e in data["events"] if e["id"] != target["id"]]
+                        persist_data(data)
+                        if st.session_state.editing_event_id == target["id"]:
+                            st.session_state.editing_event_id = None
+                            _reset_event_form()
+                        st.session_state.delete_target_id = None
+                        safe_rerun()
+                with delete_cols[1]:
+                    if st.button("取消", key="cancel_delete"):
+                        st.session_state.delete_target_id = None
+            else:
+                st.session_state.delete_target_id = None
+
 
 if selected_page == "周视图":
     st.markdown("<div class='section-title'>周视图</div>", unsafe_allow_html=True)
@@ -764,6 +794,7 @@ if selected_page == "周视图":
                         "<div class='event-block' "
                         f"style='top:{top}px; height:{height}px; left:{left_pct}%; width:calc({width_pct}% - 6px); "
                         f"background:{color}; border-color:{color};'>"
+                        f"<a class='event-delete' href='?delete_event={ev['id']}'>🗑</a>"
                         f"<div class='event-block-time'>{ev['start']}-{ev['end']}</div>"
                         f"<div>{ev['title']}</div>"
                         "</div>"
