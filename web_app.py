@@ -292,8 +292,9 @@ body { background-color: #EEF5FF; }
 .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
 .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .day-timeline { position: relative; height: 640px; border: 1px solid #E2EAF5; border-radius: 12px; background: #FFFFFF; background-image: repeating-linear-gradient(to bottom, #EEF2F7 0, #EEF2F7 1px, transparent 1px, transparent 40px); }
-.event-block { position: absolute; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; font-size: 12px; color: #1F3B57; overflow: hidden; }
+.event-block { position: absolute; padding: 4px 8px 6px; border-radius: 10px; border: 1px solid transparent; font-size: 12px; color: #1F3B57; overflow: hidden; }
 .event-block-time { font-weight: 700; }
+.event-block-time { margin-top: -2px; }
 .event-delete { position: absolute; top: 4px; right: 6px; font-size: 12px; color: #6B7C93; }
 .week-day-title { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; }
 .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
