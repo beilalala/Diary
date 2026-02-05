@@ -691,26 +691,30 @@ if not st.session_state.sidebar_collapsed:
                     persist_data(data)
                     st.success("已保存")
 
-        if st.session_state.delete_target_id:
-            target = next((e for e in data["events"] if e["id"] == st.session_state.delete_target_id), None)
-            if target:
-                st.warning("是否删除该日程？")
-                st.caption(f"{target.get('start', '')}-{target.get('end', '')} {target.get('title', '')}")
-                delete_cols = st.columns(2)
-                with delete_cols[0]:
-                    if st.button("确认删除", key="confirm_delete"):
-                        data["events"] = [e for e in data["events"] if e["id"] != target["id"]]
-                        persist_data(data)
-                        if st.session_state.editing_event_id == target["id"]:
-                            st.session_state.editing_event_id = None
-                            _reset_event_form()
-                        st.session_state.delete_target_id = None
-                        safe_rerun()
-                with delete_cols[1]:
-                    if st.button("取消", key="cancel_delete"):
-                        st.session_state.delete_target_id = None
-            else:
-                st.session_state.delete_target_id = None
+if st.session_state.delete_target_id:
+    target = next((e for e in data["events"] if e["id"] == st.session_state.delete_target_id), None)
+    if target:
+        with st.dialog("删除日程"):
+            st.write("是否删除该日程？")
+            st.caption(f"{target.get('start', '')}-{target.get('end', '')} {target.get('title', '')}")
+            confirm_cols = st.columns(2)
+            with confirm_cols[0]:
+                if st.button("确认删除", key="confirm_delete"):
+                    data["events"] = [e for e in data["events"] if e["id"] != target["id"]]
+                    persist_data(data)
+                    if st.session_state.editing_event_id == target["id"]:
+                        st.session_state.editing_event_id = None
+                        _reset_event_form()
+                    st.session_state.delete_target_id = None
+                    safe_rerun()
+            with confirm_cols[1]:
+                if st.button("取消", key="cancel_delete"):
+                    st.session_state.delete_target_id = None
+                    safe_rerun()
+    else:
+        st.session_state.delete_target_id = None
+
+        pass
 
 
 if selected_page == "周视图":
@@ -745,6 +749,7 @@ if selected_page == "周视图":
                 st.write(f"备注：{notes if notes else '无'}")
                 if st.button("🗑 删除", key=f"delete_event_{ev['id']}"):
                     st.session_state.delete_target_id = ev["id"]
+                    st.session_state.sidebar_collapsed = False
                     safe_rerun()
                 st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -777,6 +782,7 @@ if selected_page == "周视图":
                     with action_cols[1]:
                         if st.button("🗑", key=f"delete_inline_{ev['id']}"):
                             st.session_state.delete_target_id = ev["id"]
+                            st.session_state.sidebar_collapsed = False
                             safe_rerun()
                 layouts = layout_day_events(events)
                 html_blocks = ["<div class='day-timeline'>"]
