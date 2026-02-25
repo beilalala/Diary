@@ -18,7 +18,7 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 USER_DATA_DIR = os.path.join(DATA_DIR, "users")
 
-DEFAULT_DATA = {"events": [], "archives": [], "moods": {}, "pomodoro_records": [], "word_books": {}}
+DEFAULT_DATA = {"events": [], "archives": [], "moods": {}, "pomodoro_records": [], "word_books": {}, "habits": []}
 
 CATEGORIES = ["生活", "学习", "班团事务", "运动", "其他"]
 CATEGORY_COLORS = {
@@ -82,6 +82,7 @@ def load_data(file_path: str):
     data.setdefault("moods", {})
     data.setdefault("pomodoro_records", [])
     data.setdefault("word_books", {})
+    data.setdefault("habits", [])
     return data
 
 
@@ -200,6 +201,7 @@ def db_load_user_data(user_id: str):
     data.setdefault("moods", {})
     data.setdefault("pomodoro_records", [])
     data.setdefault("word_books", {})
+    data.setdefault("habits", [])
     return data
 
 
@@ -358,6 +360,10 @@ body { background-color: #EEF5FF; }
 .month-cell:hover { border-color: #9CB4E0; }
 .month-weekday { font-weight: 700; text-align: center; color: #51729B; }
 .detail-card { background: #FFFFFF; border-radius: 12px; padding: 10px 12px; border: 1px solid #E2EAF5; margin: 8px 0; }
+.habit-card .stButton > button { background: #F9F9F9; border: 1px solid #E2EAF5; border-radius: 10px; padding: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); min-height: 160px; display: flex; flex-direction: column; justify-content: space-between; text-align: left; }
+.habit-card .stButton > button:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.10); transform: translateY(-1px); }
+.habit-card.complete .stButton > button { background: #E7F7E8; border-color: #BFE8C6; }
+.habit-record { padding: 8px 10px; border-radius: 8px; border: 1px solid #E2EAF5; margin: 6px 0; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -491,7 +497,7 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
     st.stop()
 
 
-PAGES = ["周视图", "月视图", "番茄钟", "统计", "单词学习"]
+PAGES = ["周视图", "月视图", "番茄钟", "统计", "单词学习", "习惯养成"]
 if "page" not in st.session_state:
     st.session_state.page = "周视图"
 if st.session_state.page not in PAGES:
@@ -543,6 +549,8 @@ if "word_temp_feedback" not in st.session_state:
     st.session_state.word_temp_feedback = ""
 if "last_page" not in st.session_state:
     st.session_state.last_page = st.session_state.page
+if "selected_habit_id" not in st.session_state:
+    st.session_state.selected_habit_id = None
 
 if "jump_day" in st.query_params:
     jump_value = st.query_params.get("jump_day")
@@ -1042,6 +1050,129 @@ if selected_page == "单词学习":
                     if st.session_state.word_test_show_answer:
                         st.button("下一个", key="next_test", on_click=_next_test_word)
                     st.button("结束背诵", key="stop_test", on_click=_stop_test)
+
+if selected_page == "习惯养成":
+    st.markdown("<div class='section-title'>习惯养成·21天打卡</div>", unsafe_allow_html=True)
+
+    def _count_habit_days(habit: dict) -> int:
+        return sum(1 for r in habit.get("records", []) if r.get("completed"))
+
+    def _ensure_habit_completed(habit: dict) -> bool:
+        if habit.get("completed"):
+            return False
+        if _count_habit_days(habit) >= 21:
+            habit["completed"] = True
+            return True
+        return False
+
+    habits = data.get("habits", [])
+
+    if st.session_state.selected_habit_id is None:
+        with st.popover("➕ 新建习惯"):
+            with st.form("new_habit_form", clear_on_submit=True):
+                habit_name = st.text_input("习惯名称")
+                submitted = st.form_submit_button("创建")
+                if submitted:
+                    if not habit_name.strip():
+                        st.error("习惯名称不能为空")
+                    else:
+                        habits.append({
+                            "id": str(uuid.uuid4()),
+                            "name": habit_name.strip(),
+                            "created": date.today().isoformat(),
+                            "completed": False,
+                            "records": [],
+                        })
+                        data["habits"] = habits
+                        persist_data(data)
+                        st.success("已创建习惯")
+                        safe_rerun()
+
+        if not habits:
+            st.info("还没有习惯，先新建一个吧")
+        else:
+            updated = False
+            for habit in habits:
+                if _ensure_habit_completed(habit):
+                    updated = True
+            if updated:
+                persist_data(data)
+
+            cols = st.columns(2)
+            for idx, habit in enumerate(habits):
+                col = cols[idx % 2]
+                days_done = _count_habit_days(habit)
+                last_date = ""
+                if habit.get("records"):
+                    last_date = sorted(habit["records"], key=lambda x: x.get("date", ""))[-1].get("date", "")
+                status_text = "✅ 已完成" if habit.get("completed") else ""
+                label_lines = [habit.get("name", "未命名"), f"第 {days_done} 天 / 21 天"]
+                if last_date:
+                    label_lines.append(f"最近打卡：{last_date}")
+                if status_text:
+                    label_lines.append(status_text)
+                card_label = "\n".join(label_lines)
+                card_class = "habit-card complete" if habit.get("completed") else "habit-card"
+                with col:
+                    st.markdown(f"<div class='{card_class}'>", unsafe_allow_html=True)
+                    if st.button(card_label, key=f"habit_{habit['id']}", use_container_width=True):
+                        st.session_state.selected_habit_id = habit["id"]
+                        safe_rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        selected = next((h for h in habits if h.get("id") == st.session_state.selected_habit_id), None)
+        if not selected:
+            st.session_state.selected_habit_id = None
+            safe_rerun()
+
+        if st.button("← 返回习惯列表", key="back_habit_list"):
+            st.session_state.selected_habit_id = None
+            safe_rerun()
+
+        st.markdown(f"### {selected.get('name', '未命名')}")
+        today = date.today().isoformat()
+        today_display = date.today().strftime("%Y年%m月%d日")
+        records = selected.get("records", [])
+        updated = _ensure_habit_completed(selected)
+        if updated:
+            persist_data(data)
+
+        if selected.get("completed"):
+            st.success("恭喜！该习惯已养成")
+        else:
+            st.markdown(f"**今日：{today_display}**")
+            already = next((r for r in records if r.get("date") == today), None)
+            done_today = bool(already and already.get("completed"))
+            note_today = already.get("note", "") if already else ""
+            done_flag = st.checkbox("今天完成了吗？", value=done_today, disabled=already is not None)
+            note_text = st.text_input("留下一句话…", value=note_today, disabled=already is not None)
+            if st.button("提交打卡", key="submit_habit", disabled=already is not None):
+                if already is not None:
+                    st.warning("今天已经打卡过了")
+                else:
+                    records.append({"date": today, "completed": bool(done_flag), "note": note_text.strip()})
+                    selected["records"] = records
+                    if _ensure_habit_completed(selected):
+                        selected["completed"] = True
+                    persist_data(data)
+                    st.toast("打卡成功")
+                    safe_rerun()
+
+        st.markdown("#### 历史打卡记录")
+        if not records:
+            st.info("暂无打卡记录")
+        else:
+            for idx, rec in enumerate(sorted(records, key=lambda x: x.get("date", ""), reverse=True)):
+                bg = "#F7FAFF" if idx % 2 == 0 else "#FFFFFF"
+                status = "✅" if rec.get("completed") else "❌"
+                note = rec.get("note", "").strip()
+                note_text = f"“{note}”" if note else "—"
+                st.markdown(
+                    f"<div class='habit-record' style='background:{bg};'>"
+                    f"<strong>{rec.get('date', '')}</strong> {status} {note_text}"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
 footer_theme = "dark" if not st.session_state.dark_mode else "light"
