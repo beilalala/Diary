@@ -360,7 +360,7 @@ body { background-color: #EEF5FF; }
 .month-cell:hover { border-color: #9CB4E0; }
 .month-weekday { font-weight: 700; text-align: center; color: #51729B; }
 .detail-card { background: #FFFFFF; border-radius: 12px; padding: 10px 12px; border: 1px solid #E2EAF5; margin: 8px 0; }
-.habit-card .stButton > button { background: #F9F9F9; border: 1px solid #E2EAF5; border-radius: 10px; padding: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); min-height: 160px; display: flex; flex-direction: column; justify-content: space-between; text-align: left; }
+.habit-card .stButton > button { background: #F9F9F9; border: 1px solid #E2EAF5; border-radius: 10px; padding: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); min-height: 220px; display: flex; flex-direction: column; justify-content: space-between; text-align: left; font-size: 18px; line-height: 1.25; }
 .habit-card .stButton > button:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.10); transform: translateY(-1px); }
 .habit-card.complete .stButton > button { background: #E7F7E8; border-color: #BFE8C6; }
 .habit-record { padding: 8px 10px; border-radius: 8px; border: 1px solid #E2EAF5; margin: 6px 0; }
@@ -551,6 +551,8 @@ if "last_page" not in st.session_state:
     st.session_state.last_page = st.session_state.page
 if "selected_habit_id" not in st.session_state:
     st.session_state.selected_habit_id = None
+if "habit_delete_confirm" not in st.session_state:
+    st.session_state.habit_delete_confirm = False
 
 if "jump_day" in st.query_params:
     jump_value = st.query_params.get("jump_day")
@@ -904,8 +906,15 @@ if selected_page == "周视图":
 
 if selected_page == "月视图":
     st.markdown("<div class='section-title'>月视图</div>", unsafe_allow_html=True)
-    curr = st.date_input("选择月（选择任意当月日期）", value=date.today(), key="month_pick")
-    m_start = month_start(curr)
+    today = date.today()
+    year_options = list(range(today.year - 2, today.year + 3))
+    month_options = list(range(1, 13))
+    month_cols = st.columns(2)
+    with month_cols[0]:
+        pick_year = st.selectbox("选择年份", year_options, index=year_options.index(today.year), key="month_pick_year")
+    with month_cols[1]:
+        pick_month = st.selectbox("选择月份", month_options, index=month_options.index(today.month), key="month_pick_month")
+    m_start = date(pick_year, pick_month, 1)
     st.markdown(f"**{m_start.strftime('%Y年 %m月')}**")
     first_weekday = (m_start.weekday() + 1) % 7
     days_in_month = (next_month(m_start) - timedelta(days=1)).day
@@ -1123,13 +1132,32 @@ if selected_page == "习惯养成":
         selected = next((h for h in habits if h.get("id") == st.session_state.selected_habit_id), None)
         if not selected:
             st.session_state.selected_habit_id = None
+            st.session_state.habit_delete_confirm = False
             safe_rerun()
 
         if st.button("← 返回习惯列表", key="back_habit_list"):
             st.session_state.selected_habit_id = None
+            st.session_state.habit_delete_confirm = False
             safe_rerun()
 
         st.markdown(f"### {selected.get('name', '未命名')}")
+        delete_cols = st.columns([1, 5])
+        with delete_cols[0]:
+            if st.button("删除习惯", key="delete_habit"):
+                st.session_state.habit_delete_confirm = True
+        if st.session_state.habit_delete_confirm:
+            confirm_cols = st.columns(2)
+            with confirm_cols[0]:
+                if st.button("确认删除", key="confirm_delete_habit"):
+                    data["habits"] = [h for h in habits if h.get("id") != selected.get("id")]
+                    persist_data(data)
+                    st.session_state.selected_habit_id = None
+                    st.session_state.habit_delete_confirm = False
+                    st.success("已删除习惯")
+                    safe_rerun()
+            with confirm_cols[1]:
+                if st.button("取消", key="cancel_delete_habit"):
+                    st.session_state.habit_delete_confirm = False
         today = date.today().isoformat()
         today_display = date.today().strftime("%Y年%m月%d日")
         records = selected.get("records", [])
