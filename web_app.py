@@ -10,6 +10,7 @@ import time
 import math
 import hashlib
 from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 import plotly.graph_objects as go
 from supabase import create_client, Client
 
@@ -234,11 +235,18 @@ def iso_week_start(d: date):
 def month_start(d: date):
     return d.replace(day=1)
 
-
 def next_month(d: date):
     if d.month == 12:
         return date(d.year + 1, 1, 1)
     return date(d.year, d.month + 1, 1)
+
+LOCAL_TZ = ZoneInfo("Asia/Shanghai")
+
+def now_local() -> datetime:
+    return datetime.now(LOCAL_TZ)
+
+def today_local() -> date:
+    return now_local().date()
 
 
 def to_minutes(time_str: str) -> int:
@@ -480,7 +488,7 @@ try:
 except Exception:
     pass
 
-today_key = date.today().strftime("%Y-%m-%d")
+today_key = today_local().strftime("%Y-%m-%d")
 if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped"):
     st.markdown("<div class='section-title'>欢迎回家，今天的心情怎样？</div>", unsafe_allow_html=True)
     cols = st.columns(8)
@@ -516,7 +524,7 @@ if "editing_event_id" not in st.session_state:
 if "event_title" not in st.session_state:
     st.session_state.event_title = "新日程"
 if "event_date" not in st.session_state:
-    st.session_state.event_date = date.today()
+    st.session_state.event_date = today_local()
 if "event_start" not in st.session_state:
     st.session_state.event_start = datetime.strptime("09:00", "%H:%M").time()
 if "event_end" not in st.session_state:
@@ -636,7 +644,7 @@ selected_page = st.session_state.page
 
 def _reset_event_form():
     st.session_state.event_title = "新日程"
-    st.session_state.event_date = date.today()
+    st.session_state.event_date = today_local()
     st.session_state.event_start = datetime.strptime("09:00", "%H:%M").time()
     st.session_state.event_end = datetime.strptime("10:00", "%H:%M").time()
     st.session_state.event_category = CATEGORIES[0]
@@ -670,7 +678,7 @@ def _save_temp_to_book(data_ref: dict):
     if not st.session_state.word_temp_list:
         st.session_state.word_temp_feedback = "今日临时列表为空"
         return
-    today_key = date.today().strftime("%Y-%m-%d")
+    today_key = today_local().strftime("%Y-%m-%d")
     data_ref.setdefault("word_books", {})
     data_ref["word_books"].setdefault(today_key, [])
     data_ref["word_books"][today_key].extend(st.session_state.word_temp_list)
@@ -797,7 +805,7 @@ if st.session_state.delete_target_id:
 
 if selected_page == "周视图":
     st.markdown("<div class='section-title'>周视图</div>", unsafe_allow_html=True)
-    picked = st.date_input("选择周中的任意日期", value=date.today(), key="week_pick")
+    picked = st.date_input("选择周中的任意日期", value=today_local(), key="week_pick")
     week_start = iso_week_start(picked)
     st.markdown(f"**周：{week_start.strftime('%Y/%m/%d')} - {(week_start + timedelta(days=6)).strftime('%Y/%m/%d')}**")
 
@@ -906,7 +914,7 @@ if selected_page == "周视图":
 
 if selected_page == "月视图":
     st.markdown("<div class='section-title'>月视图</div>", unsafe_allow_html=True)
-    today = date.today()
+    today = today_local()
     year_options = list(range(today.year - 2, today.year + 3))
     month_options = list(range(1, 13))
     month_cols = st.columns(2)
@@ -1088,7 +1096,7 @@ if selected_page == "习惯养成":
                         habits.append({
                             "id": str(uuid.uuid4()),
                             "name": habit_name.strip(),
-                            "created": date.today().isoformat(),
+                            "created": today_local().isoformat(),
                             "completed": False,
                             "records": [],
                         })
@@ -1158,8 +1166,8 @@ if selected_page == "习惯养成":
             with confirm_cols[1]:
                 if st.button("取消", key="cancel_delete_habit"):
                     st.session_state.habit_delete_confirm = False
-        today = date.today().isoformat()
-        today_display = date.today().strftime("%Y年%m月%d日")
+        today = today_local().isoformat()
+        today_display = today_local().strftime("%Y年%m月%d日")
         records = selected.get("records", [])
         updated = _ensure_habit_completed(selected)
         if updated:
@@ -1240,12 +1248,21 @@ if selected_page == "番茄钟":
 
         st.markdown(f"<div class='timer-text'>{format_seconds(remaining)}</div>", unsafe_allow_html=True)
 
-        preset_row1 = st.columns(3)
-        preset_row2 = st.columns(3)
-        presets = [(15, "15:00"), (30, "30:00"), (60, "60:00"), (1, "01:00"), (5, "05:00"), (10, "10:00")]
+        preset_rows = [st.columns(3) for _ in range(3)]
+        presets = [
+            (120, "120:00"),
+            (90, "90:00"),
+            (60, "60:00"),
+            (45, "45:00"),
+            (30, "30:00"),
+            (15, "15:00"),
+            (10, "10:00"),
+            (5, "05:00"),
+            (1, "01:00"),
+        ]
         for i, (mins, label) in enumerate(presets):
-            cols = preset_row1 if i < 3 else preset_row2
-            with cols[i % 3]:
+            row = preset_rows[i // 3]
+            with row[i % 3]:
                 if st.button(label, key=f"preset_{mins}"):
                     st.session_state.pomodoro_running = True
                     st.session_state.pomodoro_start = time.time()
@@ -1257,7 +1274,7 @@ if selected_page == "番茄钟":
                 elapsed = int(time.time() - st.session_state.pomodoro_start)
                 if elapsed >= int(st.session_state.pomodoro_duration * 0.8):
                     rec = {
-                        "start": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "start": now_local().strftime("%Y-%m-%d %H:%M:%S"),
                         "seconds": st.session_state.pomodoro_duration,
                     }
                     data["pomodoro_records"].append(rec)
@@ -1270,7 +1287,7 @@ if selected_page == "番茄钟":
         if st.session_state.pomodoro_running:
             if remaining <= 0:
                 rec = {
-                    "start": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "start": now_local().strftime("%Y-%m-%d %H:%M:%S"),
                     "seconds": st.session_state.pomodoro_duration,
                 }
                 data["pomodoro_records"].append(rec)
@@ -1346,7 +1363,7 @@ if selected_page == "统计":
 if selected_page == "往期回顾":
     st.markdown("<div class='section-title'>往期回顾</div>", unsafe_allow_html=True)
     with st.form("add_archive"):
-        a_date = st.date_input("日期", value=date.today(), key="archive_date")
+        a_date = st.date_input("日期", value=today_local(), key="archive_date")
         a_text = st.text_area("说说你的想法")
         a_cat = st.selectbox("类型", CATEGORIES, key="archive_cat")
         submitted = st.form_submit_button("保存")
