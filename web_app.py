@@ -480,13 +480,13 @@ def persist_data(payload: dict):
     else:
         save_data(payload, user_data_file)
 
-header_cols = st.columns([3, 2])
+header_cols = st.columns([2, 2, 2])
 with header_cols[0]:
     st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
 with header_cols[1]:
     bjt_time = now_local().strftime("%H:%M")
     st.markdown(
-        f"<div style='text-align:right; font-size:16px; color:#51729B; font-weight:600;'>北京时间 {bjt_time}</div>",
+        f"<div style='text-align:center; font-size:20px; color:#1F3B57; font-weight:700;'>北京时间 {bjt_time}</div>",
         unsafe_allow_html=True,
     )
 st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
@@ -513,7 +513,7 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
     st.stop()
 
 
-PAGES = ["周视图", "月视图", "番茄钟", "统计", "单词学习", "习惯养成"]
+PAGES = ["周视图", "习惯养成", "番茄钟", "月视图", "单词学习", "统计"]
 if "page" not in st.session_state:
     st.session_state.page = "周视图"
 if st.session_state.page not in PAGES:
