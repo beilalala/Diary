@@ -214,6 +214,17 @@ def db_save_user_data(user_id: str, data: dict):
         return
 
 
+def test_supabase_connection() -> tuple[bool, str]:
+    client = get_supabase_client()
+    if not client:
+        return False, "未找到 SUPABASE_URL/SUPABASE_KEY"
+    try:
+        client.table("user_accounts").select("id").limit(1).execute()
+    except Exception as exc:
+        return False, str(exc)
+    return True, "连接正常"
+
+
 def iso_week_start(d: date):
     return d - timedelta(days=d.weekday())
 
@@ -359,6 +370,18 @@ if storage_mode == "local" and st.session_state.get("supabase_error"):
 if "user" not in st.session_state:
     st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
     st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
+
+    with st.expander("Supabase 连接测试"):
+        st.caption(f"当前存储模式：{storage_mode}")
+        if st.button("开始测试", key="supabase_test_btn"):
+            ok, msg = test_supabase_connection()
+            st.session_state.supabase_test_ok = ok
+            st.session_state.supabase_test_msg = msg
+        if "supabase_test_msg" in st.session_state:
+            if st.session_state.get("supabase_test_ok"):
+                st.success(st.session_state.supabase_test_msg)
+            else:
+                st.error(st.session_state.supabase_test_msg)
 
     login_tab, register_tab = st.tabs(["登录", "注册"])
 
