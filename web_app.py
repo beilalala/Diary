@@ -480,7 +480,15 @@ def persist_data(payload: dict):
     else:
         save_data(payload, user_data_file)
 
-st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
+header_cols = st.columns([3, 2])
+with header_cols[0]:
+    st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
+with header_cols[1]:
+    bjt_time = now_local().strftime("%H:%M")
+    st.markdown(
+        f"<div style='text-align:right; font-size:16px; color:#51729B; font-weight:600;'>北京时间 {bjt_time}</div>",
+        unsafe_allow_html=True,
+    )
 st.markdown("<div class='subtitle'>打造属于自我的舒适之家</div>", unsafe_allow_html=True)
 try:
     _build_stamp = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y-%m-%d %H:%M")
