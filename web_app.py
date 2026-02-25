@@ -121,15 +121,38 @@ def get_supabase_client() -> Client | None:
     return create_client(url, key)
 
 
+def _set_supabase_unavailable(exc: Exception | None = None) -> None:
+    st.session_state.storage_mode = "local"
+    if exc is not None:
+        st.session_state.supabase_error = str(exc)
+
+
 def get_storage_mode() -> str:
-    return "supabase" if get_supabase_client() else "local"
+    cached = st.session_state.get("storage_mode")
+    if cached in {"supabase", "local"}:
+        return cached
+    client = get_supabase_client()
+    if not client:
+        st.session_state.storage_mode = "local"
+        return "local"
+    try:
+        client.table("user_accounts").select("id").limit(1).execute()
+    except Exception as exc:
+        _set_supabase_unavailable(exc)
+        return "local"
+    st.session_state.storage_mode = "supabase"
+    return "supabase"
 
 
 def db_get_user(username: str):
     client = get_supabase_client()
     if not client:
         return None
-    res = client.table("user_accounts").select("id, username, salt, hash").eq("username", username).limit(1).execute()
+    try:
+        res = client.table("user_accounts").select("id, username, salt, hash").eq("username", username).limit(1).execute()
+    except Exception as exc:
+        _set_supabase_unavailable(exc)
+        return None
     return res.data[0] if res.data else None
 
 
@@ -139,10 +162,18 @@ def db_create_user(username: str, password: str):
         return None
     salt = uuid.uuid4().hex
     hashed = hash_password(password, salt)
-    user_res = client.table("user_accounts").insert({"username": username, "salt": salt, "hash": hashed}).execute()
+    try:
+        user_res = client.table("user_accounts").insert({"username": username, "salt": salt, "hash": hashed}).execute()
+    except Exception as exc:
+        _set_supabase_unavailable(exc)
+        return None
     user = user_res.data[0] if user_res.data else None
     if user:
-        client.table("user_data").upsert({"user_id": user["id"], "data": DEFAULT_DATA}).execute()
+        try:
+            client.table("user_data").upsert({"user_id": user["id"], "data": DEFAULT_DATA}).execute()
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return None
     return user
 
 
@@ -150,11 +181,19 @@ def db_load_user_data(user_id: str):
     client = get_supabase_client()
     if not client:
         return DEFAULT_DATA.copy()
-    res = client.table("user_data").select("data").eq("user_id", user_id).limit(1).execute()
+    try:
+        res = client.table("user_data").select("data").eq("user_id", user_id).limit(1).execute()
+    except Exception as exc:
+        _set_supabase_unavailable(exc)
+        return DEFAULT_DATA.copy()
     if res.data:
         data = res.data[0].get("data") or {}
     else:
-        client.table("user_data").upsert({"user_id": user_id, "data": DEFAULT_DATA}).execute()
+        try:
+            client.table("user_data").upsert({"user_id": user_id, "data": DEFAULT_DATA}).execute()
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return DEFAULT_DATA.copy()
         data = DEFAULT_DATA.copy()
     data.setdefault("events", [])
     data.setdefault("archives", [])
@@ -168,7 +207,11 @@ def db_save_user_data(user_id: str, data: dict):
     client = get_supabase_client()
     if not client:
         return
-    client.table("user_data").upsert({"user_id": user_id, "data": data}).execute()
+    try:
+        client.table("user_data").upsert({"user_id": user_id, "data": data}).execute()
+    except Exception as exc:
+        _set_supabase_unavailable(exc)
+        return
 
 
 def iso_week_start(d: date):
@@ -310,6 +353,8 @@ body { background-color: #EEF5FF; }
 )
 
 storage_mode = get_storage_mode()
+if storage_mode == "local" and st.session_state.get("supabase_error"):
+    st.warning("Supabase 连接失败，已切换到本地存储。请检查 Secrets 里的 SUPABASE_URL/SUPABASE_KEY。")
 
 if "user" not in st.session_state:
     st.markdown("<div class='title'>My Diary</div>", unsafe_allow_html=True)
