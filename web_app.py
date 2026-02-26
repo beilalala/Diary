@@ -372,10 +372,10 @@ body { background-color: #EEF5FF; }
 .detail-event-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .detail-panel { background: #FFFFFF; border-radius: 14px; border: 1px solid #E2EAF5; padding: 14px 16px; margin: 8px 0 16px; }
 .detail-panel h4 { margin: 4px 0 10px; }
-.footer-fixed { position: fixed; right: 120px; bottom: 24px; z-index: 999; }
-.footer-fixed .stButton { width: auto; }
-.footer-fixed .stButton > button { width: 96px; text-align: center; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 10px; background: #F7FAFF; color: #1F3B57; font-weight: 600; font-size: 12px; }
-.footer-fixed .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
+#theme-toggle-anchor + div { position: fixed; right: 120px; bottom: 24px; z-index: 999; width: auto; }
+#theme-toggle-anchor + div .stButton { width: auto; }
+#theme-toggle-anchor + div .stButton > button { width: 96px; text-align: center; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 10px; background: #F7FAFF; color: #1F3B57; font-weight: 600; font-size: 12px; }
+#theme-toggle-anchor + div .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .event-card { background: #FFFFFF; border-radius: 10px; padding: 8px 10px; margin: 6px 0; border: 1px solid #E2EAF5; font-size: 14px; }
 .event-time { font-weight: 700; color: #1F3B57; margin-right: 6px; }
 .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
@@ -665,7 +665,7 @@ if st.session_state.dark_mode:
     st.markdown(
         """
 <style>
-body { background-color: #1D2430; color: #E7EDF7; }
+html, body, .stApp, div[data-testid="stAppViewContainer"], div[data-testid="stHeader"], div[data-testid="stToolbar"], footer { background-color: #1D2430 !important; }
 .block-container { background-color: #1D2430; }
 section[data-testid="stSidebar"] { background-color: #252D3A; }
 .title, .subtitle, .section-title, .stMarkdown, .stCaption,
@@ -674,15 +674,15 @@ section[data-testid="stSidebar"] { background-color: #252D3A; }
 label, .stTextInput label, .stSelectbox label, .stDateInput label,
 .stTimeInput label, .stTextArea label { color: #E7EDF7 !important; }
 .card, .detail-panel { background: #252D3A; border-color: #3A4A5F; color: #E7EDF7; }
-.week-day-btn .stButton > button { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
-.week-day-btn .stButton > button:hover { background: #37465C; }
+.stButton > button { background: #2A3450; border-color: #3A4A5F; color: #E7EDF7; }
+.stButton > button:hover { background: #33405C; }
 .month-cell { background: #2A3445; border-color: #3A4A5F; color: #E7EDF7; }
 .month-weekday { color: #9FB3C8; }
 .event-card, .detail-event-btn .stButton > button { background: #202735; border-color: #3A4A5F; color: #E7EDF7; }
 .event-block { color: #1F3B57; }
 input, textarea, select { background-color: #202735 !important; color: #E7EDF7 !important; border-color: #3A4A5F !important; }
-.footer-fixed .stButton > button { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
-.footer-fixed .stButton > button:hover { background: #37465C; }
+#theme-toggle-anchor + div .stButton > button { background: #2A3450; border-color: #3A4A5F; color: #E7EDF7; }
+#theme-toggle-anchor + div .stButton > button:hover { background: #33405C; }
 </style>
 """,
         unsafe_allow_html=True,
@@ -1269,11 +1269,10 @@ if selected_page == "习惯养成":
                 )
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
-st.markdown("<div class='footer-fixed'>", unsafe_allow_html=True)
+st.markdown("<div id='theme-toggle-anchor'></div>", unsafe_allow_html=True)
 if st.button(footer_label, key="toggle_theme"):
     st.session_state.dark_mode = not st.session_state.dark_mode
     safe_rerun()
-st.markdown("</div>", unsafe_allow_html=True)
 
 if selected_page == "番茄钟":
     st.markdown("<div class='section-title'>番茄钟</div>", unsafe_allow_html=True)
