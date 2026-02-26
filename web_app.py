@@ -372,7 +372,7 @@ body { background-color: #EEF5FF; }
 .detail-event-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .detail-panel { background: #FFFFFF; border-radius: 14px; border: 1px solid #E2EAF5; padding: 14px 16px; margin: 8px 0 16px; }
 .detail-panel h4 { margin: 4px 0 10px; }
-#theme-toggle-anchor + div { position: fixed; right: 120px; bottom: 24px; z-index: 999; width: auto; }
+#theme-toggle-anchor + div { position: fixed; right: 160px; bottom: 24px; z-index: 999; width: auto; }
 #theme-toggle-anchor + div .stButton { width: auto; }
 #theme-toggle-anchor + div .stButton > button { width: 96px; text-align: center; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 10px; background: #F7FAFF; color: #1F3B57; font-weight: 600; font-size: 12px; }
 #theme-toggle-anchor + div .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
