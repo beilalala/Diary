@@ -349,8 +349,8 @@ body { background-color: #EEF5FF; }
 .detail-panel { background: #FFFFFF; border-radius: 14px; border: 1px solid #E2EAF5; padding: 14px 16px; margin: 8px 0 16px; }
 .detail-panel h4 { margin: 4px 0 10px; }
 .footer-fixed { position: fixed; right: 16px; bottom: 16px; z-index: 999; }
-.footer-fixed a { display: inline-block; width: 88px; text-align: center; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 10px; background: #F7FAFF; color: #1F3B57; font-weight: 600; text-decoration: none; font-size: 12px; }
-.footer-fixed a:hover { border-color: #9CB4E0; background: #EEF5FF; }
+.footer-fixed .stButton > button { width: 88px; text-align: center; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 10px; background: #F7FAFF; color: #1F3B57; font-weight: 600; font-size: 12px; }
+.footer-fixed .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .event-card { background: #FFFFFF; border-radius: 10px; padding: 8px 10px; margin: 6px 0; border: 1px solid #E2EAF5; font-size: 14px; }
 .event-time { font-weight: 700; color: #1F3B57; margin-right: 6px; }
 .stButton > button { width: 100%; border: 1px solid #C9DBF2; border-radius: 10px; padding: 10px 8px; background: #F7FAFF; color: #1F3B57; }
@@ -584,15 +584,6 @@ if "jump_day" in st.query_params:
     except Exception:
         st.query_params.clear()
 
-if "theme" in st.query_params:
-    theme_value = str(st.query_params.get("theme")).lower()
-    if theme_value in {"dark", "light"}:
-        st.session_state.dark_mode = theme_value == "dark"
-    st.query_params.clear()
-    safe_rerun()
-
-
-
 if st.session_state.page != st.session_state.last_page:
     if st.session_state.page == "周视图":
         st.session_state.sidebar_collapsed = False
@@ -631,8 +622,8 @@ label, .stTextInput label, .stSelectbox label, .stDateInput label,
 .event-card, .detail-event-btn .stButton > button { background: #202735; border-color: #3A4A5F; color: #E7EDF7; }
 .event-block { color: #1F3B57; }
 input, textarea, select { background-color: #202735 !important; color: #E7EDF7 !important; border-color: #3A4A5F !important; }
-.footer-fixed a { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
-.footer-fixed a:hover { background: #37465C; }
+.footer-fixed .stButton > button { background: #2E3A4C; border-color: #3A4A5F; color: #E7EDF7; }
+.footer-fixed .stButton > button:hover { background: #37465C; }
 </style>
 """,
         unsafe_allow_html=True,
@@ -1219,11 +1210,11 @@ if selected_page == "习惯养成":
                 )
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
-footer_theme = "dark" if not st.session_state.dark_mode else "light"
-st.markdown(
-    f"<div class='footer-fixed'><a href='?theme={footer_theme}'>{footer_label}</a></div>",
-    unsafe_allow_html=True,
-)
+st.markdown("<div class='footer-fixed'>", unsafe_allow_html=True)
+if st.button(footer_label, key="toggle_theme"):
+    st.session_state.dark_mode = not st.session_state.dark_mode
+    safe_rerun()
+st.markdown("</div>", unsafe_allow_html=True)
 
 if selected_page == "番茄钟":
     st.markdown("<div class='section-title'>番茄钟</div>", unsafe_allow_html=True)
