@@ -348,7 +348,7 @@ body { background-color: #EEF5FF; }
 .detail-event-btn .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .detail-panel { background: #FFFFFF; border-radius: 14px; border: 1px solid #E2EAF5; padding: 14px 16px; margin: 8px 0 16px; }
 .detail-panel h4 { margin: 4px 0 10px; }
-.footer-fixed { position: fixed; right: 16px; bottom: 16px; z-index: 999; }
+.footer-fixed { position: fixed; right: 192px; bottom: 16px; z-index: 999; }
 .footer-fixed .stButton > button { width: 88px; text-align: center; border: 1px solid #C9DBF2; border-radius: 10px; padding: 6px 10px; background: #F7FAFF; color: #1F3B57; font-weight: 600; font-size: 12px; }
 .footer-fixed .stButton > button:hover { border-color: #9CB4E0; background: #EEF5FF; }
 .event-card { background: #FFFFFF; border-radius: 10px; padding: 8px 10px; margin: 6px 0; border: 1px solid #E2EAF5; font-size: 14px; }
