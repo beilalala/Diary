@@ -665,8 +665,13 @@ if st.session_state.dark_mode:
     st.markdown(
         """
 <style>
-html, body, .stApp, div[data-testid="stAppViewContainer"], div[data-testid="stHeader"], div[data-testid="stToolbar"], footer { background-color: #1D2430 !important; }
-.block-container { background-color: #1D2430; }
+html, body, .stApp, header, footer,
+div[data-testid="stAppViewContainer"],
+div[data-testid="stHeader"],
+div[data-testid="stToolbar"],
+section[data-testid="stSidebar"] ~ main,
+section[data-testid="stSidebar"] ~ div { background-color: #1D2430 !important; }
+.block-container { background-color: #1D2430 !important; }
 section[data-testid="stSidebar"] { background-color: #252D3A; }
 .title, .subtitle, .section-title, .stMarkdown, .stCaption,
 .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4, .stMarkdown h5, .stMarkdown h6,
@@ -683,6 +688,15 @@ label, .stTextInput label, .stSelectbox label, .stDateInput label,
 input, textarea, select { background-color: #202735 !important; color: #E7EDF7 !important; border-color: #3A4A5F !important; }
 #theme-toggle-anchor + div .stButton > button { background: #2A3450; border-color: #3A4A5F; color: #E7EDF7; }
 #theme-toggle-anchor + div .stButton > button:hover { background: #33405C; }
+.stSidebar svg, .stSidebar [data-testid="stSelectbox"] svg,
+.stSidebar [data-testid="stDateInput"] svg, .stSidebar [data-testid="stTimeInput"] svg,
+.stSidebar [data-testid="stTextInput"] svg, .stSidebar [data-testid="stTextArea"] svg,
+main svg, main [data-testid="stSelectbox"] svg, main [data-testid="stDateInput"] svg,
+main [data-testid="stTimeInput"] svg, main [data-testid="stTextInput"] svg, main [data-testid="stTextArea"] svg {
+    color: #2A3450 !important;
+    fill: #2A3450 !important;
+    stroke: #2A3450 !important;
+}
 </style>
 """,
         unsafe_allow_html=True,
