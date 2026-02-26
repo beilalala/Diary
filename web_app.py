@@ -397,6 +397,16 @@ if "user" not in st.session_state:
                 st.success(st.session_state.supabase_test_msg)
             else:
                 st.error(st.session_state.supabase_test_msg)
+        st.markdown("#### 账号自检")
+        check_user = st.text_input("要检查的用户名", key="supabase_check_user")
+        if st.button("查询账号", key="supabase_check_btn"):
+            info = db_get_user(check_user.strip()) if check_user.strip() else None
+            st.session_state.supabase_check_result = info is not None
+        if "supabase_check_result" in st.session_state:
+            if st.session_state.supabase_check_result:
+                st.success("该账号在 Supabase 中存在")
+            else:
+                st.error("未找到该账号（或当前连接失败）")
 
     login_tab, register_tab = st.tabs(["登录", "注册"])
 
