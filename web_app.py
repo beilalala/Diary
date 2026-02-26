@@ -179,6 +179,30 @@ def db_create_user(username: str, password: str):
     return user
 
 
+def db_update_user_password(username: str, password: str) -> bool:
+    client = get_supabase_client()
+    if not client:
+        return False
+    salt = uuid.uuid4().hex
+    hashed = hash_password(password, salt)
+    try:
+        res = client.table("user_accounts").update({"salt": salt, "hash": hashed}).eq("username", username).execute()
+    except Exception as exc:
+        _set_supabase_unavailable(exc)
+        return False
+    return bool(res.data)
+
+
+def local_update_user_password(username: str, password: str) -> bool:
+    users = load_users()
+    if username not in users:
+        return False
+    salt = uuid.uuid4().hex
+    users[username] = {"salt": salt, "hash": hash_password(password, salt)}
+    save_users(users)
+    return True
+
+
 def db_load_user_data(user_id: str):
     client = get_supabase_client()
     if not client:
@@ -407,6 +431,30 @@ if "user" not in st.session_state:
                 st.success("该账号在 Supabase 中存在")
             else:
                 st.error("未找到该账号（或当前连接失败）")
+        st.markdown("#### 管理员重置密码")
+        admin_code = st.secrets.get("ADMIN_CODE")
+        if not admin_code:
+            st.info("未配置 ADMIN_CODE，无法进行管理员重置")
+        else:
+            with st.form("admin_reset_form"):
+                reset_user = st.text_input("要重置的用户名", key="admin_reset_user")
+                reset_pass = st.text_input("新密码", type="password", key="admin_reset_pass")
+                admin_input = st.text_input("管理员口令", type="password", key="admin_reset_code")
+                submitted = st.form_submit_button("重置密码")
+                if submitted:
+                    if admin_input != admin_code:
+                        st.error("管理员口令错误")
+                    elif not reset_user.strip() or len(reset_pass) < 6:
+                        st.error("用户名不能为空，且密码至少 6 位")
+                    else:
+                        if storage_mode == "supabase":
+                            ok = db_update_user_password(reset_user.strip(), reset_pass)
+                        else:
+                            ok = local_update_user_password(reset_user.strip(), reset_pass)
+                        if ok:
+                            st.success("密码已重置")
+                        else:
+                            st.error("重置失败：账号不存在或连接异常")
 
     login_tab, register_tab = st.tabs(["登录", "注册"])
 
