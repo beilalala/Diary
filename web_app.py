@@ -899,6 +899,12 @@ if "forum_delete_post_id" not in st.session_state:
     st.session_state.forum_delete_post_id = None
 if "forum_delete_comment_id" not in st.session_state:
     st.session_state.forum_delete_comment_id = None
+if "forum_new_post" not in st.session_state:
+    st.session_state.forum_new_post = ""
+if "forum_post_feedback" not in st.session_state:
+    st.session_state.forum_post_feedback = None
+if "forum_comment_feedback" not in st.session_state:
+    st.session_state.forum_comment_feedback = {}
 
 if "jump_day" in st.query_params:
     jump_value = st.query_params.get("jump_day")
@@ -1553,6 +1559,88 @@ if selected_page == "习惯养成":
                     unsafe_allow_html=True,
                 )
 
+def _set_forum_post_feedback(level: str, message: str) -> None:
+    st.session_state.forum_post_feedback = {"level": level, "message": message}
+
+
+def _consume_forum_post_feedback() -> None:
+    payload = st.session_state.pop("forum_post_feedback", None)
+    if not payload:
+        return
+    level = payload.get("level", "info")
+    message = payload.get("message", "")
+    if not message:
+        return
+    if level == "success":
+        st.success(message)
+    elif level == "warning":
+        st.warning(message)
+    elif level == "error":
+        st.error(message)
+    else:
+        st.info(message)
+
+
+def _set_forum_comment_feedback(post_id: str, level: str, message: str) -> None:
+    feedback = st.session_state.get("forum_comment_feedback") or {}
+    feedback[post_id] = {"level": level, "message": message}
+    st.session_state.forum_comment_feedback = feedback
+
+
+def _consume_forum_comment_feedback(post_id: str) -> None:
+    feedback = st.session_state.get("forum_comment_feedback") or {}
+    payload = feedback.pop(post_id, None)
+    st.session_state.forum_comment_feedback = feedback
+    if not payload:
+        return
+    level = payload.get("level", "info")
+    message = payload.get("message", "")
+    if not message:
+        return
+    if level == "success":
+        st.success(message)
+    elif level == "warning":
+        st.warning(message)
+    elif level == "error":
+        st.error(message)
+    else:
+        st.info(message)
+
+
+def _submit_forum_post(storage_mode: str, data_ref: dict, user_id: str, username: str) -> None:
+    content = st.session_state.get("forum_new_post", "").strip()
+    if not content:
+        _set_forum_post_feedback("warning", "内容不能为空")
+        return
+    if forum_create_post(storage_mode, content, user_id, username, data_ref):
+        if storage_mode != "supabase":
+            persist_data(data_ref)
+        st.session_state.forum_new_post = ""
+        _set_forum_post_feedback("success", "已发布")
+    else:
+        _set_forum_post_feedback("error", "发布失败，请稍后再试")
+
+
+def _submit_forum_comment(
+    post_id: str,
+    comment_key: str,
+    storage_mode: str,
+    data_ref: dict,
+    user_id: str,
+    username: str,
+) -> None:
+    content = st.session_state.get(comment_key, "").strip()
+    if not content:
+        _set_forum_comment_feedback(post_id, "warning", "评论不能为空")
+        return
+    if forum_create_comment(storage_mode, post_id, content, user_id, username, data_ref):
+        if storage_mode != "supabase":
+            persist_data(data_ref)
+        st.session_state[comment_key] = ""
+        _set_forum_comment_feedback(post_id, "success", "评论已发布")
+    else:
+        _set_forum_comment_feedback(post_id, "error", "评论失败，请稍后再试")
+
 if selected_page == "论坛":
     st.markdown("<div class='section-title'>论坛</div>", unsafe_allow_html=True)
     st.caption("与其他用户在线交流")
@@ -1562,19 +1650,13 @@ if selected_page == "论坛":
 
     st.markdown("#### 发布新帖")
     st.text_area("内容", key="forum_new_post", height=120)
-    if st.button("发布", key="forum_submit_post"):
-        content = st.session_state.get("forum_new_post", "").strip()
-        if not content:
-            st.warning("内容不能为空")
-        else:
-            if forum_create_post(storage_mode, content, current_user_id, current_user, data):
-                if storage_mode != "supabase":
-                    persist_data(data)
-                st.session_state.forum_new_post = ""
-                st.success("已发布")
-                safe_rerun()
-            else:
-                st.error("发布失败，请稍后再试")
+    st.button(
+        "发布",
+        key="forum_submit_post",
+        on_click=_submit_forum_post,
+        args=(storage_mode, data, current_user_id, current_user),
+    )
+    _consume_forum_post_feedback()
 
     st.markdown("#### 最新帖子")
     posts = forum_list_posts(storage_mode, data)
@@ -1649,6 +1731,7 @@ if selected_page == "论坛":
 
                 st.markdown("##### 评论")
                 comments = forum_list_comments(storage_mode, post["id"], data)
+                _consume_forum_comment_feedback(post["id"])
                 if not comments:
                     st.caption("暂无评论")
                 else:
@@ -1725,26 +1808,12 @@ if selected_page == "论坛":
                 if not deleted:
                     comment_key = f"forum_comment_{post['id']}"
                     st.text_area("写评论", key=comment_key, height=80)
-                    if st.button("发表评论", key=f"forum_submit_comment_{post['id']}"):
-                        comment_text = st.session_state.get(comment_key, "").strip()
-                        if not comment_text:
-                            st.warning("评论不能为空")
-                        else:
-                            if forum_create_comment(
-                                storage_mode,
-                                post["id"],
-                                comment_text,
-                                current_user_id,
-                                current_user,
-                                data,
-                            ):
-                                if storage_mode != "supabase":
-                                    persist_data(data)
-                                st.session_state[comment_key] = ""
-                                st.success("评论已发布")
-                                safe_rerun()
-                            else:
-                                st.error("评论失败，请稍后再试")
+                    st.button(
+                        "发表评论",
+                        key=f"forum_submit_comment_{post['id']}",
+                        on_click=_submit_forum_comment,
+                        args=(post["id"], comment_key, storage_mode, data, current_user_id, current_user),
+                    )
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
 st.markdown("<div id='theme-toggle-anchor'></div>", unsafe_allow_html=True)
