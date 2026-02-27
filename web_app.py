@@ -19,7 +19,16 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 USER_DATA_DIR = os.path.join(DATA_DIR, "users")
 
-DEFAULT_DATA = {"events": [], "archives": [], "moods": {}, "pomodoro_records": [], "word_books": {}, "habits": []}
+DEFAULT_DATA = {
+    "events": [],
+    "archives": [],
+    "moods": {},
+    "pomodoro_records": [],
+    "word_books": {},
+    "habits": [],
+    "forum_posts": [],
+    "forum_comments": [],
+}
 
 CATEGORIES = ["生活", "学习", "班团事务", "运动", "其他"]
 CATEGORY_COLORS = {
@@ -84,6 +93,8 @@ def load_data(file_path: str):
     data.setdefault("pomodoro_records", [])
     data.setdefault("word_books", {})
     data.setdefault("habits", [])
+    data.setdefault("forum_posts", [])
+    data.setdefault("forum_comments", [])
     return data
 
 
@@ -227,6 +238,8 @@ def db_load_user_data(user_id: str):
     data.setdefault("pomodoro_records", [])
     data.setdefault("word_books", {})
     data.setdefault("habits", [])
+    data.setdefault("forum_posts", [])
+    data.setdefault("forum_comments", [])
     return data
 
 
@@ -250,6 +263,256 @@ def test_supabase_connection() -> tuple[bool, str]:
     except Exception as exc:
         return False, str(exc)
     return True, "连接正常"
+
+
+def _normalize_timestamp(value: str | None) -> str:
+    if not value:
+        return ""
+    return value
+
+
+def _format_timestamp(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return dt.astimezone(LOCAL_TZ).strftime("%m-%d %H:%M")
+    except Exception:
+        return str(value)
+
+
+def _forum_snippet(text: str, limit: int = 24) -> str:
+    compact = " ".join(text.strip().split())
+    if len(compact) <= limit:
+        return compact
+    return compact[:limit].rstrip() + "..."
+
+
+def forum_list_posts(storage_mode: str, data_ref: dict | None = None) -> list[dict]:
+    if storage_mode == "supabase":
+        client = get_supabase_client()
+        if not client:
+            return []
+        try:
+            res = (
+                client.table("forum_posts")
+                .select("id, user_id, username, content, created_at, updated_at, deleted")
+                .order("created_at", desc=True)
+                .limit(80)
+                .execute()
+            )
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return []
+        return res.data or []
+
+    data_ref = data_ref or {}
+    posts = data_ref.get("forum_posts", [])
+    return sorted(posts, key=lambda x: x.get("created_at", ""), reverse=True)
+
+
+def forum_list_comments(storage_mode: str, post_id: str, data_ref: dict | None = None) -> list[dict]:
+    if storage_mode == "supabase":
+        client = get_supabase_client()
+        if not client:
+            return []
+        try:
+            res = (
+                client.table("forum_comments")
+                .select("id, post_id, user_id, username, content, created_at, updated_at, deleted")
+                .eq("post_id", post_id)
+                .order("created_at", desc=False)
+                .execute()
+            )
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return []
+        return res.data or []
+
+    data_ref = data_ref or {}
+    comments = [c for c in data_ref.get("forum_comments", []) if c.get("post_id") == post_id]
+    return sorted(comments, key=lambda x: x.get("created_at", ""))
+
+
+def forum_create_post(storage_mode: str, content: str, user_id: str, username: str, data_ref: dict | None = None) -> bool:
+    created_at = now_local().isoformat()
+    if storage_mode == "supabase":
+        client = get_supabase_client()
+        if not client:
+            return False
+        payload = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "username": username,
+            "content": content,
+            "created_at": created_at,
+            "updated_at": None,
+            "deleted": False,
+        }
+        try:
+            res = client.table("forum_posts").insert(payload).execute()
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return False
+        return bool(res.data)
+
+    if data_ref is None:
+        return False
+    data_ref.setdefault("forum_posts", [])
+    data_ref["forum_posts"].append({
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "username": username,
+        "content": content,
+        "created_at": created_at,
+        "updated_at": None,
+        "deleted": False,
+    })
+    return True
+
+
+def forum_update_post(storage_mode: str, post_id: str, content: str, data_ref: dict | None = None) -> bool:
+    updated_at = now_local().isoformat()
+    if storage_mode == "supabase":
+        client = get_supabase_client()
+        if not client:
+            return False
+        try:
+            res = (
+                client.table("forum_posts")
+                .update({"content": content, "updated_at": updated_at})
+                .eq("id", post_id)
+                .execute()
+            )
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return False
+        return bool(res.data)
+
+    if data_ref is None:
+        return False
+    for item in data_ref.get("forum_posts", []):
+        if item.get("id") == post_id:
+            item["content"] = content
+            item["updated_at"] = updated_at
+            return True
+    return False
+
+
+def forum_delete_post(storage_mode: str, post_id: str, data_ref: dict | None = None) -> bool:
+    if storage_mode == "supabase":
+        client = get_supabase_client()
+        if not client:
+            return False
+        try:
+            res = client.table("forum_posts").update({"deleted": True}).eq("id", post_id).execute()
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return False
+        return bool(res.data)
+
+    if data_ref is None:
+        return False
+    for item in data_ref.get("forum_posts", []):
+        if item.get("id") == post_id:
+            item["deleted"] = True
+            return True
+    return False
+
+
+def forum_create_comment(
+    storage_mode: str,
+    post_id: str,
+    content: str,
+    user_id: str,
+    username: str,
+    data_ref: dict | None = None,
+) -> bool:
+    created_at = now_local().isoformat()
+    if storage_mode == "supabase":
+        client = get_supabase_client()
+        if not client:
+            return False
+        payload = {
+            "id": str(uuid.uuid4()),
+            "post_id": post_id,
+            "user_id": user_id,
+            "username": username,
+            "content": content,
+            "created_at": created_at,
+            "updated_at": None,
+            "deleted": False,
+        }
+        try:
+            res = client.table("forum_comments").insert(payload).execute()
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return False
+        return bool(res.data)
+
+    if data_ref is None:
+        return False
+    data_ref.setdefault("forum_comments", [])
+    data_ref["forum_comments"].append({
+        "id": str(uuid.uuid4()),
+        "post_id": post_id,
+        "user_id": user_id,
+        "username": username,
+        "content": content,
+        "created_at": created_at,
+        "updated_at": None,
+        "deleted": False,
+    })
+    return True
+
+
+def forum_update_comment(storage_mode: str, comment_id: str, content: str, data_ref: dict | None = None) -> bool:
+    updated_at = now_local().isoformat()
+    if storage_mode == "supabase":
+        client = get_supabase_client()
+        if not client:
+            return False
+        try:
+            res = (
+                client.table("forum_comments")
+                .update({"content": content, "updated_at": updated_at})
+                .eq("id", comment_id)
+                .execute()
+            )
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return False
+        return bool(res.data)
+
+    if data_ref is None:
+        return False
+    for item in data_ref.get("forum_comments", []):
+        if item.get("id") == comment_id:
+            item["content"] = content
+            item["updated_at"] = updated_at
+            return True
+    return False
+
+
+def forum_delete_comment(storage_mode: str, comment_id: str, data_ref: dict | None = None) -> bool:
+    if storage_mode == "supabase":
+        client = get_supabase_client()
+        if not client:
+            return False
+        try:
+            res = client.table("forum_comments").update({"deleted": True}).eq("id", comment_id).execute()
+        except Exception as exc:
+            _set_supabase_unavailable(exc)
+            return False
+        return bool(res.data)
+
+    if data_ref is None:
+        return False
+    for item in data_ref.get("forum_comments", []):
+        if item.get("id") == comment_id:
+            item["deleted"] = True
+            return True
+    return False
 
 
 def iso_week_start(d: date):
@@ -572,7 +835,7 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
     st.stop()
 
 
-PAGES = ["周视图", "习惯养成", "番茄钟", "月视图", "单词学习", "统计"]
+PAGES = ["周视图", "习惯养成", "番茄钟", "月视图", "单词学习", "统计", "论坛"]
 if "page" not in st.session_state:
     st.session_state.page = "周视图"
 if st.session_state.page not in PAGES:
@@ -628,6 +891,14 @@ if "selected_habit_id" not in st.session_state:
     st.session_state.selected_habit_id = None
 if "habit_delete_confirm" not in st.session_state:
     st.session_state.habit_delete_confirm = False
+if "forum_edit_post_id" not in st.session_state:
+    st.session_state.forum_edit_post_id = None
+if "forum_edit_comment_id" not in st.session_state:
+    st.session_state.forum_edit_comment_id = None
+if "forum_delete_post_id" not in st.session_state:
+    st.session_state.forum_delete_post_id = None
+if "forum_delete_comment_id" not in st.session_state:
+    st.session_state.forum_delete_comment_id = None
 
 if "jump_day" in st.query_params:
     jump_value = st.query_params.get("jump_day")
@@ -1281,6 +1552,199 @@ if selected_page == "习惯养成":
                     "</div>",
                     unsafe_allow_html=True,
                 )
+
+if selected_page == "论坛":
+    st.markdown("<div class='section-title'>论坛</div>", unsafe_allow_html=True)
+    st.caption("与其他用户在线交流")
+
+    current_user = st.session_state.user
+    current_user_id = st.session_state.get("user_id") or current_user
+
+    st.markdown("#### 发布新帖")
+    st.text_area("内容", key="forum_new_post", height=120)
+    if st.button("发布", key="forum_submit_post"):
+        content = st.session_state.get("forum_new_post", "").strip()
+        if not content:
+            st.warning("内容不能为空")
+        else:
+            if forum_create_post(storage_mode, content, current_user_id, current_user, data):
+                if storage_mode != "supabase":
+                    persist_data(data)
+                st.session_state.forum_new_post = ""
+                st.success("已发布")
+                safe_rerun()
+            else:
+                st.error("发布失败，请稍后再试")
+
+    st.markdown("#### 最新帖子")
+    posts = forum_list_posts(storage_mode, data)
+    if not posts:
+        st.info("暂无帖子")
+    else:
+        for post in posts:
+            author = post.get("username") or "匿名"
+            created = _format_timestamp(_normalize_timestamp(post.get("created_at")))
+            updated = _format_timestamp(_normalize_timestamp(post.get("updated_at")))
+            label = f"{author} · {created} · {_forum_snippet(post.get('content', ''))}"
+            with st.expander(label, expanded=False):
+                deleted = bool(post.get("deleted"))
+                if deleted:
+                    st.info("该帖子已被删除")
+                else:
+                    if st.session_state.forum_edit_post_id == post.get("id"):
+                        edit_key = f"forum_edit_post_{post['id']}"
+                        st.text_area("编辑内容", value=post.get("content", ""), key=edit_key, height=120)
+                        edit_cols = st.columns(2)
+                        with edit_cols[0]:
+                            if st.button("保存修改", key=f"forum_save_post_{post['id']}"):
+                                new_text = st.session_state.get(edit_key, "").strip()
+                                if not new_text:
+                                    st.warning("内容不能为空")
+                                else:
+                                    if forum_update_post(storage_mode, post["id"], new_text, data):
+                                        if storage_mode != "supabase":
+                                            persist_data(data)
+                                        st.session_state.forum_edit_post_id = None
+                                        st.success("已更新")
+                                        safe_rerun()
+                                    else:
+                                        st.error("更新失败")
+                        with edit_cols[1]:
+                            if st.button("取消", key=f"forum_cancel_post_{post['id']}"):
+                                st.session_state.forum_edit_post_id = None
+                                safe_rerun()
+                    else:
+                        st.write(post.get("content", ""))
+                        if updated:
+                            st.caption(f"编辑于 {updated}")
+
+                    if post.get("user_id") == current_user_id:
+                        action_cols = st.columns(2)
+                        with action_cols[0]:
+                            if st.button("编辑", key=f"forum_edit_post_btn_{post['id']}"):
+                                st.session_state.forum_edit_post_id = post["id"]
+                                safe_rerun()
+                        with action_cols[1]:
+                            if st.button("删除", key=f"forum_del_post_btn_{post['id']}"):
+                                st.session_state.forum_delete_post_id = post["id"]
+                                safe_rerun()
+
+                if st.session_state.forum_delete_post_id == post.get("id"):
+                    st.warning("确认删除该帖子？")
+                    confirm_cols = st.columns(2)
+                    with confirm_cols[0]:
+                        if st.button("确认删除", key=f"forum_confirm_del_post_{post['id']}"):
+                            if forum_delete_post(storage_mode, post["id"], data):
+                                if storage_mode != "supabase":
+                                    persist_data(data)
+                                st.session_state.forum_delete_post_id = None
+                                st.success("已删除")
+                                safe_rerun()
+                            else:
+                                st.error("删除失败")
+                    with confirm_cols[1]:
+                        if st.button("取消", key=f"forum_cancel_del_post_{post['id']}"):
+                            st.session_state.forum_delete_post_id = None
+                            safe_rerun()
+
+                st.markdown("##### 评论")
+                comments = forum_list_comments(storage_mode, post["id"], data)
+                if not comments:
+                    st.caption("暂无评论")
+                else:
+                    for comment in comments:
+                        c_author = comment.get("username") or "匿名"
+                        c_created = _format_timestamp(_normalize_timestamp(comment.get("created_at")))
+                        c_updated = _format_timestamp(_normalize_timestamp(comment.get("updated_at")))
+                        if comment.get("deleted"):
+                            st.caption(f"{c_author} · {c_created} · 评论已删除")
+                            continue
+
+                        if st.session_state.forum_edit_comment_id == comment.get("id"):
+                            edit_key = f"forum_edit_comment_{comment['id']}"
+                            st.text_area(
+                                f"编辑评论 · {c_author} {c_created}",
+                                value=comment.get("content", ""),
+                                key=edit_key,
+                                height=80,
+                            )
+                            edit_cols = st.columns(2)
+                            with edit_cols[0]:
+                                if st.button("保存", key=f"forum_save_comment_{comment['id']}"):
+                                    new_text = st.session_state.get(edit_key, "").strip()
+                                    if not new_text:
+                                        st.warning("内容不能为空")
+                                    else:
+                                        if forum_update_comment(storage_mode, comment["id"], new_text, data):
+                                            if storage_mode != "supabase":
+                                                persist_data(data)
+                                            st.session_state.forum_edit_comment_id = None
+                                            st.success("已更新")
+                                            safe_rerun()
+                                        else:
+                                            st.error("更新失败")
+                            with edit_cols[1]:
+                                if st.button("取消", key=f"forum_cancel_comment_{comment['id']}"):
+                                    st.session_state.forum_edit_comment_id = None
+                                    safe_rerun()
+                        else:
+                            st.markdown(f"**{c_author}** · {c_created}")
+                            st.write(comment.get("content", ""))
+                            if c_updated:
+                                st.caption(f"编辑于 {c_updated}")
+
+                            if comment.get("user_id") == current_user_id:
+                                action_cols = st.columns(2)
+                                with action_cols[0]:
+                                    if st.button("编辑", key=f"forum_edit_comment_btn_{comment['id']}"):
+                                        st.session_state.forum_edit_comment_id = comment["id"]
+                                        safe_rerun()
+                                with action_cols[1]:
+                                    if st.button("删除", key=f"forum_del_comment_btn_{comment['id']}"):
+                                        st.session_state.forum_delete_comment_id = comment["id"]
+                                        safe_rerun()
+
+                        if st.session_state.forum_delete_comment_id == comment.get("id"):
+                            st.warning("确认删除该评论？")
+                            confirm_cols = st.columns(2)
+                            with confirm_cols[0]:
+                                if st.button("确认删除", key=f"forum_confirm_del_comment_{comment['id']}"):
+                                    if forum_delete_comment(storage_mode, comment["id"], data):
+                                        if storage_mode != "supabase":
+                                            persist_data(data)
+                                        st.session_state.forum_delete_comment_id = None
+                                        st.success("已删除")
+                                        safe_rerun()
+                                    else:
+                                        st.error("删除失败")
+                            with confirm_cols[1]:
+                                if st.button("取消", key=f"forum_cancel_del_comment_{comment['id']}"):
+                                    st.session_state.forum_delete_comment_id = None
+                                    safe_rerun()
+
+                if not deleted:
+                    comment_key = f"forum_comment_{post['id']}"
+                    st.text_area("写评论", key=comment_key, height=80)
+                    if st.button("发表评论", key=f"forum_submit_comment_{post['id']}"):
+                        comment_text = st.session_state.get(comment_key, "").strip()
+                        if not comment_text:
+                            st.warning("评论不能为空")
+                        else:
+                            if forum_create_comment(
+                                storage_mode,
+                                post["id"],
+                                comment_text,
+                                current_user_id,
+                                current_user,
+                                data,
+                            ):
+                                if storage_mode != "supabase":
+                                    persist_data(data)
+                                st.session_state[comment_key] = ""
+                                st.success("评论已发布")
+                                safe_rerun()
+                            else:
+                                st.error("评论失败，请稍后再试")
 
 footer_label = "深色模式" if not st.session_state.dark_mode else "浅色模式"
 st.markdown("<div id='theme-toggle-anchor'></div>", unsafe_allow_html=True)
