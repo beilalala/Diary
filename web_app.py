@@ -304,10 +304,11 @@ def forum_list_posts(storage_mode: str, data_ref: dict | None = None) -> list[di
         except Exception as exc:
             _set_supabase_unavailable(exc)
             return []
-        return res.data or []
+        posts = res.data or []
+        return [p for p in posts if not p.get("deleted")]
 
     data_ref = data_ref or {}
-    posts = data_ref.get("forum_posts", [])
+    posts = [p for p in data_ref.get("forum_posts", []) if not p.get("deleted")]
     return sorted(posts, key=lambda x: x.get("created_at", ""), reverse=True)
 
 
@@ -327,10 +328,14 @@ def forum_list_comments(storage_mode: str, post_id: str, data_ref: dict | None =
         except Exception as exc:
             _set_supabase_unavailable(exc)
             return []
-        return res.data or []
+        comments = res.data or []
+        return [c for c in comments if not c.get("deleted")]
 
     data_ref = data_ref or {}
-    comments = [c for c in data_ref.get("forum_comments", []) if c.get("post_id") == post_id]
+    comments = [
+        c for c in data_ref.get("forum_comments", [])
+        if c.get("post_id") == post_id and not c.get("deleted")
+    ]
     return sorted(comments, key=lambda x: x.get("created_at", ""))
 
 
@@ -405,7 +410,7 @@ def forum_delete_post(storage_mode: str, post_id: str, data_ref: dict | None = N
         if not client:
             return False
         try:
-            res = client.table("forum_posts").update({"deleted": True}).eq("id", post_id).execute()
+            res = client.table("forum_posts").delete().eq("id", post_id).execute()
         except Exception as exc:
             _set_supabase_unavailable(exc)
             return False
@@ -413,11 +418,12 @@ def forum_delete_post(storage_mode: str, post_id: str, data_ref: dict | None = N
 
     if data_ref is None:
         return False
-    for item in data_ref.get("forum_posts", []):
-        if item.get("id") == post_id:
-            item["deleted"] = True
-            return True
-    return False
+    original = data_ref.get("forum_posts", [])
+    remaining = [item for item in original if item.get("id") != post_id]
+    if len(remaining) == len(original):
+        return False
+    data_ref["forum_posts"] = remaining
+    return True
 
 
 def forum_create_comment(
@@ -500,7 +506,7 @@ def forum_delete_comment(storage_mode: str, comment_id: str, data_ref: dict | No
         if not client:
             return False
         try:
-            res = client.table("forum_comments").update({"deleted": True}).eq("id", comment_id).execute()
+            res = client.table("forum_comments").delete().eq("id", comment_id).execute()
         except Exception as exc:
             _set_supabase_unavailable(exc)
             return False
@@ -508,11 +514,12 @@ def forum_delete_comment(storage_mode: str, comment_id: str, data_ref: dict | No
 
     if data_ref is None:
         return False
-    for item in data_ref.get("forum_comments", []):
-        if item.get("id") == comment_id:
-            item["deleted"] = True
-            return True
-    return False
+    original = data_ref.get("forum_comments", [])
+    remaining = [item for item in original if item.get("id") != comment_id]
+    if len(remaining) == len(original):
+        return False
+    data_ref["forum_comments"] = remaining
+    return True
 
 
 def iso_week_start(d: date):
