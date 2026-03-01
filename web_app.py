@@ -24,6 +24,7 @@ DEFAULT_DATA = {
     "archives": [],
     "moods": {},
     "pomodoro_records": [],
+    "pomodoro_state": {"running": False, "start": None, "duration": 0},
     "word_books": {},
     "habits": [],
     "forum_posts": [],
@@ -91,6 +92,7 @@ def load_data(file_path: str):
     data.setdefault("archives", [])
     data.setdefault("moods", {})
     data.setdefault("pomodoro_records", [])
+    data.setdefault("pomodoro_state", {"running": False, "start": None, "duration": 0})
     data.setdefault("word_books", {})
     data.setdefault("habits", [])
     data.setdefault("forum_posts", [])
@@ -236,6 +238,7 @@ def db_load_user_data(user_id: str):
     data.setdefault("archives", [])
     data.setdefault("moods", {})
     data.setdefault("pomodoro_records", [])
+    data.setdefault("pomodoro_state", {"running": False, "start": None, "duration": 0})
     data.setdefault("word_books", {})
     data.setdefault("habits", [])
     data.setdefault("forum_posts", [])
@@ -970,6 +973,10 @@ label, .stTextInput label, .stSelectbox label, .stDateInput label,
 .event-card, .detail-event-btn .stButton > button { background: #202735; border-color: #3A4A5F; color: #E7EDF7; }
 .event-block { color: #1F3B57; }
 input, textarea, select { background-color: #202735 !important; color: #E7EDF7 !important; border-color: #3A4A5F !important; }
+div[data-testid="stExpander"] > details > summary,
+div[data-testid="stExpander"] > details > summary * { color: #E7EDF7 !important; }
+div[data-testid="stExpander"] div[data-testid="stMarkdownContainer"],
+div[data-testid="stExpander"] .stMarkdown { color: #E7EDF7 !important; }
 #theme-toggle-anchor + div .stButton > button { background: #2A3450; border-color: #3A4A5F; color: #E7EDF7; }
 #theme-toggle-anchor + div .stButton > button:hover { background: #33405C; }
 .stSidebar svg, .stSidebar [data-testid="stSelectbox"] svg,
@@ -1847,15 +1854,35 @@ if selected_page == "番茄钟":
         st.markdown(f"<div class='focus-text'>你已专注了{h}小时{m}分钟</div>", unsafe_allow_html=True)
 
         if "pomodoro_running" not in st.session_state:
-            st.session_state.pomodoro_running = False
-            st.session_state.pomodoro_start = None
-            st.session_state.pomodoro_duration = 0
+            state = data.get("pomodoro_state") or {}
+            st.session_state.pomodoro_running = bool(state.get("running"))
+            st.session_state.pomodoro_start = state.get("start")
+            st.session_state.pomodoro_duration = int(state.get("duration") or 0)
 
+        remaining = 0
         if st.session_state.pomodoro_running:
-            elapsed = int(time.time() - st.session_state.pomodoro_start)
-            remaining = max(0, st.session_state.pomodoro_duration - elapsed)
-        else:
-            remaining = 0
+            start_ts = st.session_state.pomodoro_start
+            duration = int(st.session_state.pomodoro_duration or 0)
+            if not start_ts or duration <= 0:
+                st.session_state.pomodoro_running = False
+                st.session_state.pomodoro_start = None
+                st.session_state.pomodoro_duration = 0
+                data["pomodoro_state"] = {"running": False, "start": None, "duration": 0}
+                persist_data(data)
+            else:
+                elapsed = int(time.time() - start_ts)
+                remaining = max(0, duration - elapsed)
+                if remaining == 0:
+                    rec = {
+                        "start": now_local().strftime("%Y-%m-%d %H:%M:%S"),
+                        "seconds": duration,
+                    }
+                    data["pomodoro_records"].append(rec)
+                    data["pomodoro_state"] = {"running": False, "start": None, "duration": 0}
+                    persist_data(data)
+                    st.session_state.pomodoro_running = False
+                    st.session_state.pomodoro_start = None
+                    st.session_state.pomodoro_duration = 0
 
         st.markdown(f"<div class='timer-text'>{format_seconds(remaining)}</div>", unsafe_allow_html=True)
 
@@ -1876,8 +1903,15 @@ if selected_page == "番茄钟":
             with row[i % 3]:
                 if st.button(label, key=f"preset_{mins}"):
                     st.session_state.pomodoro_running = True
-                    st.session_state.pomodoro_start = time.time()
+                    start_ts = time.time()
+                    st.session_state.pomodoro_start = start_ts
                     st.session_state.pomodoro_duration = mins * 60
+                    data["pomodoro_state"] = {
+                        "running": True,
+                        "start": start_ts,
+                        "duration": mins * 60,
+                    }
+                    persist_data(data)
                     safe_rerun()
 
         if st.button("取消"):
@@ -1889,27 +1923,16 @@ if selected_page == "番茄钟":
                         "seconds": st.session_state.pomodoro_duration,
                     }
                     data["pomodoro_records"].append(rec)
-                    persist_data(data)
+                data["pomodoro_state"] = {"running": False, "start": None, "duration": 0}
+                persist_data(data)
             st.session_state.pomodoro_running = False
             st.session_state.pomodoro_start = None
             st.session_state.pomodoro_duration = 0
             safe_rerun()
 
-        if st.session_state.pomodoro_running:
-            if remaining <= 0:
-                rec = {
-                    "start": now_local().strftime("%Y-%m-%d %H:%M:%S"),
-                    "seconds": st.session_state.pomodoro_duration,
-                }
-                data["pomodoro_records"].append(rec)
-                persist_data(data)
-                st.session_state.pomodoro_running = False
-                st.session_state.pomodoro_start = None
-                st.session_state.pomodoro_duration = 0
-                safe_rerun()
-            else:
-                if not maybe_autorefresh(1000, "pomodoro_autorefresh"):
-                    st.caption("计时进行中，点击任意按钮或切换页面可更新倒计时。")
+        if st.session_state.pomodoro_running and remaining > 0:
+            if not maybe_autorefresh(1000, "pomodoro_autorefresh"):
+                st.caption("计时进行中，点击任意按钮或切换页面可更新倒计时。")
 
 if selected_page == "统计":
     st.markdown("<div class='section-title'>统计</div>", unsafe_allow_html=True)
