@@ -1011,6 +1011,33 @@ for i, name in enumerate(PAGES):
 
 selected_page = st.session_state.page
 
+if not st.session_state.dark_mode:
+    page_bg_map = {
+        "本周计划": "#EAF2FF",
+        "习惯养成": "#EEF9F1",
+        "番茄钟": "#FFF3E6",
+        "心情": "#F4F0FF",
+        "单词学习": "#EAF8FF",
+        "统计": "#F8F5E8",
+        "树洞": "#FCEFF4",
+    }
+    page_bg = page_bg_map.get(selected_page, "#EEF5FF")
+    st.markdown(
+        f"""
+<style>
+body, .stApp, .block-container,
+div[data-testid="stAppViewContainer"],
+div[data-testid="stHeader"],
+div[data-testid="stToolbar"],
+section[data-testid="stSidebar"] ~ main,
+section[data-testid="stSidebar"] ~ div {{ background-color: {page_bg} !important; }}
+.card, .detail-panel, .event-card, .detail-card, .habit-record,
+.week-day-card, .month-cell, .day-timeline {{ background: {page_bg} !important; }}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
 def _reset_event_form():
     st.session_state.event_title = "新日程"
     st.session_state.event_date = today_local()
