@@ -1029,6 +1029,8 @@ body, .stApp, .block-container,
 div[data-testid="stAppViewContainer"],
 div[data-testid="stHeader"],
 div[data-testid="stToolbar"],
+div[data-testid="stDecoration"],
+header,
 section[data-testid="stSidebar"] ~ main,
 section[data-testid="stSidebar"] ~ div {{ background-color: {page_bg} !important; }}
 .card, .detail-panel, .event-card, .detail-card, .habit-record,
