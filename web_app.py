@@ -1843,16 +1843,20 @@ if selected_page == "番茄钟":
         st.markdown("<div class='card'>", unsafe_allow_html=True)
         if not data["pomodoro_records"]:
             st.caption("暂无记录")
-        for rec in data["pomodoro_records"][-50:][::-1]:
-            st.write(f"{rec['start']}  {format_seconds(rec['seconds'])}")
+        record_indices = list(range(len(data["pomodoro_records"])))
+        for idx in record_indices[-50:][::-1]:
+            rec = data["pomodoro_records"][idx]
+            row_cols = st.columns([6, 1])
+            with row_cols[0]:
+                st.write(f"{rec['start']}  {format_seconds(rec['seconds'])}")
+            with row_cols[1]:
+                if st.button("删除", key=f"pomodoro_delete_{idx}"):
+                    data["pomodoro_records"].pop(idx)
+                    persist_data(data)
+                    safe_rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
     with right:
-        total_seconds = sum(r.get("seconds", 0) for r in data["pomodoro_records"])
-        h = total_seconds // 3600
-        m = (total_seconds % 3600) // 60
-        st.markdown(f"<div class='focus-text'>你已专注了{h}小时{m}分钟</div>", unsafe_allow_html=True)
-
         if "pomodoro_running" not in st.session_state:
             state = data.get("pomodoro_state") or {}
             st.session_state.pomodoro_running = bool(state.get("running"))
@@ -1883,6 +1887,15 @@ if selected_page == "番茄钟":
                     st.session_state.pomodoro_running = False
                     st.session_state.pomodoro_start = None
                     st.session_state.pomodoro_duration = 0
+
+        total_seconds = sum(r.get("seconds", 0) for r in data["pomodoro_records"])
+        if st.session_state.pomodoro_running and st.session_state.pomodoro_start:
+            elapsed = int(time.time() - st.session_state.pomodoro_start)
+            elapsed = max(0, min(elapsed, int(st.session_state.pomodoro_duration or 0)))
+            total_seconds += elapsed
+        h = total_seconds // 3600
+        m = (total_seconds % 3600) // 60
+        st.markdown(f"<div class='focus-text'>你已专注了{h}小时{m}分钟</div>", unsafe_allow_html=True)
 
         st.markdown(f"<div class='timer-text'>{format_seconds(remaining)}</div>", unsafe_allow_html=True)
 
