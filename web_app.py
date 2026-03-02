@@ -973,6 +973,12 @@ label, .stTextInput label, .stSelectbox label, .stDateInput label,
 .event-card, .detail-event-btn .stButton > button { background: #202735; border-color: #3A4A5F; color: #E7EDF7; }
 .event-block { color: #1F3B57; }
 input, textarea, select { background-color: #202735 !important; color: #E7EDF7 !important; border-color: #3A4A5F !important; }
+div[data-testid="stAppViewContainer"] .event-block {
+    background: #C7D2E6 !important;
+    border-color: #C7D2E6 !important;
+    color: #0B0F14 !important;
+}
+div[data-testid="stAppViewContainer"] .event-block * { color: #0B0F14 !important; }
 div[data-testid="stExpander"] > details > summary,
 div[data-testid="stExpander"] > details > summary * { color: #E7EDF7 !important; }
 div[data-testid="stExpander"] div[data-testid="stMarkdownContainer"],
