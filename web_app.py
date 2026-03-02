@@ -845,11 +845,11 @@ if not data["moods"].get(today_key) and not st.session_state.get("mood_skipped")
     st.stop()
 
 
-PAGES = ["周视图", "习惯养成", "番茄钟", "月视图", "单词学习", "统计", "论坛"]
+PAGES = ["本周计划", "习惯养成", "番茄钟", "心情", "单词学习", "统计", "树洞"]
 if "page" not in st.session_state:
-    st.session_state.page = "周视图"
+    st.session_state.page = "本周计划"
 if st.session_state.page not in PAGES:
-    st.session_state.page = "周视图"
+    st.session_state.page = "本周计划"
 if "pending_page" in st.session_state:
     st.session_state.page = st.session_state.pending_page
     del st.session_state.pending_page
@@ -920,7 +920,7 @@ if "jump_day" in st.query_params:
     jump_value = st.query_params.get("jump_day")
     try:
         jump_day = datetime.strptime(jump_value, "%Y-%m-%d").date()
-        st.session_state.pending_page = "周视图"
+        st.session_state.pending_page = "本周计划"
         st.session_state.week_pick = jump_day
         st.session_state.week_flash_target = jump_day.strftime("%Y-%m-%d")
         st.session_state.week_flash_step = 0
@@ -931,7 +931,7 @@ if "jump_day" in st.query_params:
         st.query_params.clear()
 
 if st.session_state.page != st.session_state.last_page:
-    if st.session_state.page == "周视图":
+    if st.session_state.page == "本周计划":
         st.session_state.sidebar_collapsed = False
     else:
         st.session_state.sidebar_collapsed = True
@@ -999,7 +999,7 @@ for i, name in enumerate(PAGES):
         btn_type = "primary" if st.session_state.page == name else "secondary"
         if st.button(name, key=f"nav_{name}", type=btn_type):
             st.session_state.page = name
-            if name != "周视图":
+            if name != "本周计划":
                 st.session_state.sidebar_collapsed = True
             safe_rerun()
 
@@ -1166,8 +1166,8 @@ if st.session_state.delete_target_id:
         pass
 
 
-if selected_page == "周视图":
-    st.markdown("<div class='section-title'>周视图</div>", unsafe_allow_html=True)
+if selected_page == "本周计划":
+    st.markdown("<div class='section-title'>本周计划</div>", unsafe_allow_html=True)
     picked = st.date_input("选择周中的任意日期", value=today_local(), key="week_pick")
     week_start = iso_week_start(picked)
     st.markdown(f"**周：{week_start.strftime('%Y/%m/%d')} - {(week_start + timedelta(days=6)).strftime('%Y/%m/%d')}**")
@@ -1275,8 +1275,8 @@ if selected_page == "周视图":
 
 
 
-if selected_page == "月视图":
-    st.markdown("<div class='section-title'>月视图</div>", unsafe_allow_html=True)
+if selected_page == "心情":
+    st.markdown("<div class='section-title'>心情</div>", unsafe_allow_html=True)
     today = today_local()
     year_options = list(range(today.year - 2, today.year + 3))
     month_options = list(range(1, 13))
@@ -1655,9 +1655,9 @@ def _submit_forum_comment(
     else:
         _set_forum_comment_feedback(post_id, "error", "评论失败，请稍后再试")
 
-if selected_page == "论坛":
-    st.markdown("<div class='section-title'>论坛</div>", unsafe_allow_html=True)
-    st.caption("与其他用户在线交流")
+if selected_page == "树洞":
+    st.markdown("<div class='section-title'>树洞</div>", unsafe_allow_html=True)
+    st.caption("聊聊最近的事情？")
 
     current_user = st.session_state.user
     current_user_id = st.session_state.get("user_id") or current_user
