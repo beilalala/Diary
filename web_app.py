@@ -661,8 +661,8 @@ body { background-color: #EEF5FF; }
 .week-day-title { font-family: "Segoe Script", "Bradley Hand", "Comic Sans MS", cursive; font-weight: 700; }
 .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .month-cell { display: block; padding: 10px 8px; border-radius: 10px; border: 1px solid #C9DBF2; background: #F7FAFF; text-align: center; color: #1F3B57; text-decoration: none; font-weight: 600; }
-.month-cell.good { background: #E7F7E8; }
-.month-cell.bad { background: #FBE7E7; }
+.month-cell.good { background: #E7F7E8 !important; border-color: #BFE8C6; }
+.month-cell.bad { background: #FBE7E7 !important; border-color: #F1B9B9; }
 .month-cell:hover { border-color: #9CB4E0; }
 .month-weekday { font-weight: 700; text-align: center; color: #51729B; }
 .detail-card { background: #FFFFFF; border-radius: 12px; padding: 10px 12px; border: 1px solid #E2EAF5; margin: 8px 0; }
@@ -969,6 +969,8 @@ label, .stTextInput label, .stSelectbox label, .stDateInput label,
 .stButton > button { background: #2A3450; border-color: #3A4A5F; color: #E7EDF7; }
 .stButton > button:hover { background: #33405C; }
 .month-cell { background: #2A3445; border-color: #3A4A5F; color: #E7EDF7; }
+.month-cell.good { background: #E7F7E8 !important; border-color: #BFE8C6 !important; color: #1F3B57 !important; }
+.month-cell.bad { background: #FBE7E7 !important; border-color: #F1B9B9 !important; color: #1F3B57 !important; }
 .month-weekday { color: #9FB3C8; }
 .event-card, .detail-event-btn .stButton > button { background: #202735; border-color: #3A4A5F; color: #E7EDF7; }
 .event-block { color: #1F3B57; }
@@ -1034,7 +1036,7 @@ header,
 section[data-testid="stSidebar"] ~ main,
 section[data-testid="stSidebar"] ~ div {{ background-color: {page_bg} !important; }}
 .card, .detail-panel, .event-card, .detail-card, .habit-record,
-.week-day-card, .month-cell, .day-timeline {{ background: {page_bg} !important; }}
+.week-day-card, .day-timeline {{ background: {page_bg} !important; }}
 </style>
 """,
         unsafe_allow_html=True,
